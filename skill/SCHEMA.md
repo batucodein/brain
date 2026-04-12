@@ -36,12 +36,18 @@ After significant code changes (or when asked to update brain), follow this proc
 
 #### 1. Get the WHAT (code changes)
 
-Read the actual diff, not just file names:
+Check for uncommitted changes AND recent commits since the last brain update:
 
 ```bash
+# Uncommitted changes (always check)
 git diff HEAD -- ':(exclude)*.lock' ':(exclude)package-lock.json' ':(exclude)go.sum' 2>/dev/null | head -300
 git diff --cached -- ':(exclude)*.lock' ':(exclude)package-lock.json' ':(exclude)go.sum' 2>/dev/null | head -300
-git log --since="2 hours ago" --oneline --stat 2>/dev/null
+
+# Commits since last brain update (only if brain has been committed before)
+LAST_BRAIN=$(git log -1 --format=%ci -- .brain/ 2>/dev/null)
+if [ -n "$LAST_BRAIN" ]; then
+  git log --since="$LAST_BRAIN" --oneline --stat -- ':(exclude).brain/' 2>/dev/null
+fi
 ```
 
 #### 2. Filter for significance

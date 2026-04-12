@@ -11,7 +11,7 @@ if [ -f "$CWD/.brain/index.md" ]; then
   jq -n '{
     "hookSpecificOutput": {
       "hookEventName": "SessionStart",
-      "additionalContext": "brain: This repo has .brain/ project memory. Read .brain/SCHEMA.md for instructions, then read .brain/index.md for project context. Read additional pages as needed based on the task."
+      "additionalContext": "brain: This repo has .brain/ project memory. Read .brain/index.md for project context. Read additional pages as needed based on the task. When you need to update brain pages, read .brain/SCHEMA.md for format rules and instructions."
     }
   }'
 fi

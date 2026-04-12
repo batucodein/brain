@@ -57,7 +57,10 @@ git log --oneline -1 2>/dev/null && echo "HAS_HISTORY" || echo "NO_HISTORY"
 
 **If HAS_HISTORY:** Run a comprehensive analysis. This is the most important step — the quality of the brain depends on how deeply you understand the codebase. Use the Agent tool or run multiple reads in parallel.
 
+**Print progress after each phase so the user knows what's happening.**
+
 **Phase A — Surface scan (run in parallel):**
+After Phase A completes, print: `Phase A: Found [language] project with [N] files, [N] commits, stack: [detected stack]...`
 
 **2a. Repo structure:**
 ```bash
@@ -94,6 +97,7 @@ ls migrations/ 2>/dev/null | head -20
 ```
 
 **Phase B — Deep code analysis (CRITICAL — this is what makes the brain useful):**
+After Phase B completes, print: `Phase B: Read [N] entry points, [N] services, [N] migrations, found [N] bug-fix commits...`
 
 After Phase A, you know the language and structure. Now read the actual code:
 
@@ -152,6 +156,7 @@ git log --oneline -- <path> | head -10
 ```
 
 **Phase C — Architecture mapping:**
+After Phase C completes, print: `Phase C: Mapped [N]-layer architecture, [N] external integrations...`
 
 After reading the code, map the actual architecture — not guessed from folder names, but understood from how components call each other:
 
@@ -236,37 +241,34 @@ Create `.cursor/rules` if it doesn't exist, or append brain instructions.
 **AGENTS.md:**
 Create `AGENTS.md` if it doesn't exist, or append brain instructions.
 
-### Step 5 — Offer local tool installation
+### Step 5 — Offer auto-update hooks
 
-After creating `.brain/`, ask the user if they want to install brain tools locally:
+After creating `.brain/`, check if the user already has brain hooks installed:
+
+```bash
+grep -q "post-commit-brain" ~/.claude/settings.json 2>/dev/null && echo "HOOKS_INSTALLED" || echo "NO_HOOKS"
+```
+
+**If HOOKS_INSTALLED:** Skip this step — everything is already set up.
+
+**If NO_HOOKS:** Ask:
 
 ```
-.brain/ initialized with N pages.
+.brain/ initialized. 
 
-Would you also like to install brain tools locally? This adds:
-  - /brain commands (query, dashboard, health, status) in all repos
-  - Auto-update hook (checks for brain-worthy changes after each commit)
+Would you like to install auto-update hooks? This adds:
+  - Auto-read: brain pages loaded at session start in any repo with .brain/
+  - Auto-update: checks for brain-worthy changes after each commit
 
 These are optional — brain works without them via CLAUDE.md + SCHEMA.md.
-Install locally? (y/n)
+Install hooks? (y/n)
 ```
 
-**If yes:**
-1. Check if `~/.claude/skills/brain/` exists. If not, copy skill files:
-   ```bash
-   mkdir -p ~/.claude/skills/brain/templates
-   cp .brain/SCHEMA.md ~/.claude/skills/brain/SCHEMA.md
-   ```
-   The SKILL.md and templates must come from the brain repo install — guide the user to run the install script if not present.
-
-2. Install the auto-update hook in Claude Code settings:
-   ```bash
-   # Check if settings.json exists
-   cat ~/.claude/settings.json 2>/dev/null || echo "{}"
-   ```
-   Add the brain post-commit hook (see Command: hooks install for the hook definition).
-
-3. Add brain trigger to `~/.claude/CLAUDE.md` if not already present.
+**If yes:** Guide the user to run the install script:
+```
+Run this to install hooks:
+  curl -fsSL https://raw.githubusercontent.com/batucodein/brain/main/install.sh | bash
+```
 
 **If no:** Skip. Brain still works — CLAUDE.md in the repo tells the LLM to read SCHEMA.md.
 
