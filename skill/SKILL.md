@@ -524,7 +524,7 @@ grep -c "^## " .brain/history.md .brain/decisions.md .brain/bugs.md
 4. **Output format:**
 
 ```
-.brain/ health check for: MarketIntel
+.brain/ health check for: ProjectName
 
 Score: 7/10
 
@@ -532,13 +532,13 @@ Issues found:
   [STALE] patterns.md — last updated 45 days ago
   [BROKEN LINK] features/webhook.md references [[decisions.md#redis-queue]]
       but no section "redis-queue" found in decisions.md
-  [MISSING FEATURE] internal/scoring/ has 8 files but no features/scoring.md
+  [MISSING FEATURE] src/payments/ has 8 files but no features/payments.md
   [COMPACTION] history.md has 35 entries (threshold: 30) — consider archiving
   [ORPHAN] decisions.md "Chose Redis for caching" has no [[wikilink]] to a feature page
 
 Suggestions:
   - Run /brain update to refresh stale pages
-  - Create features/scoring.md for the scoring pipeline
+  - Create features/payments.md for the payments module
   - Add [[wikilinks]] to connect orphan entries
   - Run compaction on history.md (move pre-2026 entries to archive/)
 ```
@@ -567,9 +567,9 @@ Generate an interactive HTML dashboard showing all `.brain/` entries organized b
      "index": {
        "updated": "2026-04-11",
        "description": "What the project does...",
-       "techStack": "Go 1.26 · Next.js 16 · PostgreSQL 16...",
-       "team": "Batuhan — sole developer",
-       "directories": "backend-go/cmd/ · frontend/src/..."
+       "techStack": "Python 3.12 · React 19 · PostgreSQL 16...",
+       "team": "3 engineers, 1 frontend",
+       "directories": "src/api/ · src/services/ · web/..."
      },
      "history": [
        {"title": "Entry title", "date": "2026-04-11", "content": "What happened..."}

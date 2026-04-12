@@ -73,24 +73,24 @@ One-paragraph description of what this project does and why it exists.
 
 ## Tech Stack
 
-- **Language:** Go 1.23
-- **Framework:** Chi router
-- **Database:** PostgreSQL 16 via pgx
+- **Language:** Python 3.12
+- **Framework:** FastAPI
+- **Database:** PostgreSQL 16
 - **Cache:** Redis 7
-- **CI/CD:** GitHub Actions → Cloud Run
+- **CI/CD:** GitHub Actions
 
 ## Key Directories
 
-- `cmd/` — Entry points
-- `internal/api/` — HTTP handlers
-- `internal/service/` — Business logic
-- `internal/repo/` — Database layer
+- `src/api/` — HTTP handlers
+- `src/services/` — Business logic
+- `src/models/` — Database models
+- `src/utils/` — Shared utilities
 - `web/` — Frontend (React)
 
 ## Team
 
-- 3 backend engineers, 1 frontend
-- Batuhan — lead, owns infra decisions
+- 2 backend engineers, 1 frontend
+- Project lead owns infra decisions
 ```
 
 ### decisions.md
@@ -159,18 +159,17 @@ updated: 2026-04-11
 
 ## Overview
 
-Monolith with clean internal boundaries. Three-layer architecture:
-HTTP handlers → Service layer → Repository layer.
+Brief description of the system's architecture style and key design principles.
 
 ## System Schema
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                     Client (Browser)                 │
+│                     Client                           │
 └──────────────────────┬──────────────────────────────┘
                        │ HTTPS
 ┌──────────────────────▼──────────────────────────────┐
-│                    API Gateway                       │
+│                    API Layer                          │
 │  ┌─────────┐ ┌──────────┐ ┌─────────┐ ┌─────────┐  │
 │  │  Auth   │→│  Rate    │→│ Logging │→│ Handler │  │
 │  │Middleware│ │  Limit   │ │         │ │         │  │
@@ -180,55 +179,51 @@ HTTP handlers → Service layer → Repository layer.
 ┌────────────────────────────────────────────▼────────┐
 │                  Service Layer                       │
 │  ┌──────────┐  ┌──────────┐  ┌──────────────────┐   │
-│  │  Auth    │  │ Discovery│  │  Scoring          │   │
-│  │ Service  │  │ Pipeline │  │  Service          │   │
+│  │ Service  │  │ Service  │  │  Service          │   │
+│  │    A     │  │    B     │  │    C              │   │
 │  └────┬─────┘  └────┬─────┘  └────┬─────────────┘   │
 └───────┼──────────────┼─────────────┼────────────────┘
         │              │             │
 ┌───────▼──────────────▼─────────────▼────────────────┐
 │              Data / External Layer                    │
 │  ┌────────┐ ┌───────┐ ┌──────────┐ ┌────────────┐   │
-│  │PostgreSQL│ │ Redis │ │ Azure AI │ │ Comtrade   │   │
-│  │  (pgx)  │ │(cache)│ │ (OpenAI) │ │ Google API │   │
+│  │Database │ │ Cache │ │ External │ │ External   │   │
+│  │        │ │       │ │  API 1   │ │  API 2     │   │
 │  └────────┘ └───────┘ └──────────┘ └────────────┘   │
 └─────────────────────────────────────────────────────┘
 ```
 
 ## Components
 
-### API Layer (`internal/api/`)
-Chi router with middleware chain: auth → rate-limit → logging → handler.
-All handlers return `(response, error)` — a central error middleware maps errors to HTTP status codes.
+### API Layer (`path/to/api/`)
+Describe the router, middleware chain, and how requests are handled.
 
-### Service Layer (`internal/service/`)
-Business logic. No HTTP concepts here. Services accept and return domain types.
-Each service gets its dependencies injected via constructor.
+### Service Layer (`path/to/services/`)
+Business logic. Describe how services are structured and their responsibilities.
 
-### Repository Layer (`internal/repo/`)
-PostgreSQL via pgx. Each repo struct embeds a `*pgxpool.Pool`.
-Migrations managed by golang-migrate, stored in `migrations/`.
+### Repository Layer (`path/to/repo/`)
+Data access. Describe the database driver, migration strategy, and patterns.
 
 ## Data Flow
 
-Request → Chi Router → Auth Middleware → Handler → Service → Repository → PostgreSQL
-                                                          ↘ Redis (cache)
+Request → Router → Middleware → Handler → Service → Repository → Database
+                                                  ↘ Cache
 
 ## External Integrations
 
 | Service | Purpose | Required |
 |---------|---------|----------|
-| PostgreSQL 16 | Primary database | Yes |
-| Redis 7 | AI response caching, rate limiting | Yes |
-| Azure OpenAI | Classification, scoring, analysis | Yes (at least one AI provider) |
-| Comtrade API | UN trade statistics | Yes |
-| Google Places | Business enrichment | Optional |
+| Database | Primary data store | Yes |
+| Cache | Response caching, rate limiting | Yes |
+| External API 1 | Description | Yes |
+| External API 2 | Description | Optional |
 
 ## Infrastructure
 
-- Cloud Run (2 instances, min 1)
-- Cloud SQL PostgreSQL 16
-- Memorystore Redis 7
-- Cloud Storage for file uploads
+- Hosting platform and configuration
+- Database hosting
+- Cache hosting
+- File storage
 ```
 
 ### patterns.md
