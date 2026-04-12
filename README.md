@@ -6,6 +6,7 @@ Per-repo project memory that ships with git. Every developer who clones the repo
 
 ```
 .brain/
+├── SCHEMA.md             LLM instructions + format rules (the brain of the brain)
 ├── index.md              What this project does, tech stack, team
 ├── architecture.md       System structure, components, data flow
 ├── decisions.md          Why things are the way they are
@@ -26,18 +27,47 @@ Three months later, a developer asks "why is auth custom instead of using a libr
 
 ## How It Works
 
-brain is a skill for LLM coding tools (Claude Code, Cursor, Codex). When you start a session:
+brain has three tiers — each builds on the previous:
 
-1. The LLM reads `.brain/index.md` to understand your project
-2. Based on your task, it reads relevant pages (architecture for refactoring, bugs for debugging)
-3. As you work, it updates pages with new decisions, bug fixes, and history
-4. Feature pages connect everything with `[[wikilinks]]` — so you can trace a feature's full lifecycle
+### Tier 1: Zero Install (just clone)
 
-No CLI binary. No server. No database. Just markdown files and an LLM that knows how to maintain them.
+Any repo with `.brain/` works out of the box. No install needed.
+
+1. Developer clones a repo that has `.brain/`
+2. `CLAUDE.md` (or `.cursor/rules`, `AGENTS.md`) tells the LLM to read `.brain/SCHEMA.md`
+3. `SCHEMA.md` contains everything: session behavior, update process, format rules
+4. The LLM reads brain pages, tracks reasoning during the session, updates pages after significant changes
+
+**Nothing to install. Nothing to configure. Just git clone and work.**
+
+### Tier 2: Power Commands (`/brain` skill)
+
+Install the skill to get commands for bootstrapping and querying:
+
+```
+/brain init         Bootstrap .brain/ from existing repo
+/brain query        Search across all pages, follow [[wikilinks]]
+/brain dashboard    Generate interactive HTML dashboard
+/brain health       Check for stale pages, broken links, gaps
+/brain status       Show what's in .brain/ and when pages were last updated
+/brain update       Manually trigger brain update
+/brain decide       Quick-add a decision
+/brain bug          Quick-add a bug
+/brain history      Quick-add a history entry
+```
+
+### Tier 3: Auto-Update (hooks)
+
+Install hooks for fully automatic brain maintenance:
+
+- **Session start**: LLM automatically reads `.brain/` for project context
+- **After every commit**: LLM checks the conversation for brain-worthy changes and updates pages if needed
+
+The developer just works. Brain maintains itself.
 
 ## Install
 
-**One-liner:**
+**One-liner (installs skill + hooks):**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/batucodein/brain/main/install.sh | bash
@@ -49,23 +79,6 @@ curl -fsSL https://raw.githubusercontent.com/batucodein/brain/main/install.sh | 
 git clone https://github.com/batucodein/brain.git
 cd brain
 ./install.sh
-```
-
-**Manual:**
-
-```bash
-mkdir -p ~/.claude/skills/brain/templates
-cp skill/SKILL.md skill/SCHEMA.md ~/.claude/skills/brain/
-cp skill/templates/*.md ~/.claude/skills/brain/templates/
-```
-
-Then add to `~/.claude/CLAUDE.md`:
-
-```markdown
-# brain
-- **brain** (`~/.claude/skills/brain/SKILL.md`) - per-repo project memory. Trigger: `/brain`
-When the user types `/brain`, invoke the Skill tool with `skill: "brain"` before doing anything else.
-When a repo has `.brain/` directory, read `.brain/index.md` at session start for project context.
 ```
 
 Restart your Claude Code session after installing.
@@ -89,6 +102,18 @@ Restart your Claude Code session after installing.
 /brain bug "Race condition in webhook worker — shared slice without mutex"
 /brain history "Migrated CI from CircleCI to GitHub Actions"
 ```
+
+## The WHY Problem
+
+brain captures reasoning through 5 event types that the LLM tracks during every session:
+
+1. **A choice was made** — Multiple approaches existed, one was picked
+2. **Something broke and was understood** — Bug reported, investigated, root cause found
+3. **Something was rejected** — An approach was proposed and turned down
+4. **A constraint shaped the work** — Performance, cost, time, compatibility steered the implementation
+5. **The system changed structurally** — New component, integration, or dependency
+
+After each commit, the LLM checks if any of these happened and updates the relevant brain pages. If no WHY exists in the conversation, it asks the developer or marks the entry for later.
 
 ## Example: The 3-Developer Story
 
@@ -164,30 +189,56 @@ Dark theme (background #0A0E27) with color-coded sections matching the brain typ
 
 ## Platform Support
 
-brain works with any LLM coding tool. On init, it creates platform-specific instruction files:
+brain works with any LLM coding tool. `SCHEMA.md` ships inside `.brain/` and contains everything the LLM needs. Platform-specific files just point to it:
 
-| Platform     | File              |
-|-------------|-------------------|
-| Claude Code | `CLAUDE.md`       |
-| Cursor      | `.cursor/rules`   |
-| Codex       | `AGENTS.md`       |
+| Platform     | File              | What it says |
+|-------------|-------------------|--------------|
+| Claude Code | `CLAUDE.md`       | Read `.brain/SCHEMA.md` |
+| Cursor      | `.cursor/rules`   | Read `.brain/SCHEMA.md` |
+| Codex       | `AGENTS.md`       | Read `.brain/SCHEMA.md` |
 
-Each file tells the LLM: "Read `.brain/index.md` at session start. Update pages when you make significant changes."
+## Architecture
+
+```
+┌──────────────────────────────────────────────────────┐
+│                   In the repo (git)                   │
+│                                                       │
+│  .brain/SCHEMA.md    ← LLM instructions + format     │
+│  .brain/index.md     ← Project overview               │
+│  .brain/*.md         ← Brain pages                    │
+│  CLAUDE.md           ← Points to SCHEMA.md            │
+│                                                       │
+│  Any LLM that reads CLAUDE.md can maintain brain.     │
+│  Zero install required.                               │
+└──────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────┐
+│               Local install (optional)                │
+│                                                       │
+│  ~/.claude/skills/brain/SKILL.md  ← /brain commands   │
+│  ~/.claude/hooks/                 ← Auto-update hooks  │
+│  ~/.claude/settings.json          ← Hook registration  │
+│                                                       │
+│  Adds: /brain init, query, dashboard, health          │
+│  Adds: Auto-read on session start                     │
+│  Adds: Auto-update check after every commit           │
+└──────────────────────────────────────────────────────┘
+```
 
 ## Token & Storage Cost
 
 | What | Size | When loaded |
 |------|------|-------------|
-| index.md (session start) | ~400 tokens | Every session |
-| All 6 pages | ~2,200 tokens | On demand |
-| Full .brain/ on disk | ~9 KB | Always in git |
-| Compressed in git pack | ~4 KB | - |
+| SCHEMA.md (LLM instructions) | ~1,200 tokens | Session start |
+| index.md (project overview) | ~400 tokens | Session start |
+| All brain pages | ~2,200 tokens | On demand |
+| Full .brain/ on disk | ~15 KB | Always in git |
 
 For context, a single medium source file is 3,000+ tokens. brain's overhead is negligible.
 
 ## Schema
 
-See [SCHEMA.md](skill/SCHEMA.md) for the full format specification — page types, frontmatter fields, `[[wikilink]]` syntax, update rules, compaction strategy, and merge conflict guidance.
+See [SCHEMA.md](skill/SCHEMA.md) for the full format specification — LLM instructions, page types, frontmatter fields, `[[wikilink]]` syntax, update rules, compaction strategy, and merge conflict guidance.
 
 ## Inspiration
 

@@ -1,11 +1,128 @@
-# .brain/ Schema v1.0
+# .brain/ Schema v2.0
 
 The `.brain/` directory is a per-repo project memory tracked in git. It gives any LLM coding tool (Claude Code, Cursor, Codex, Copilot) full project context at session start.
+
+---
+
+## LLM Instructions
+
+If you are an LLM reading this file, follow these instructions. This section tells you how to read, maintain, and update this project's brain. No additional tools or skills are required — everything you need is in this file.
+
+### At Session Start
+
+1. Read `.brain/index.md` to understand the project.
+2. Based on the user's task, read relevant pages:
+   - Refactoring or adding code → `architecture.md`, `patterns.md`
+   - Debugging → `bugs.md`, relevant `features/*.md`
+   - New feature → `decisions.md`, related `features/*.md`
+   - General question → search across all pages
+3. If the task relates to a specific feature, check if `features/X.md` exists and read it for full lifecycle context.
+
+### During the Session — Track Reasoning
+
+The conversation is the only place where reasoning exists. Recognize these moments as they happen — they are the WHY that brain captures:
+
+1. **A choice was made** — Multiple approaches existed, one was picked. Note what was chosen and what wasn't.
+2. **Something broke and was understood** — A bug was reported, investigated, and diagnosed. The full arc matters: symptom → investigation → root cause → fix.
+3. **Something was rejected** — An approach was proposed and turned down, or was tried and didn't work. Why it was rejected is high-value context.
+4. **A constraint shaped the work** — Performance, cost, compatibility, time, team size — anything that steered the implementation away from the default approach.
+5. **The system changed structurally** — New component, integration, dependency, or layer. Structural reasoning is the hardest to recover later.
+
+You don't need to write anything during the session — just recognize these moments so you can reference them when updating brain.
+
+### Updating .brain/ — The Process
+
+After significant code changes (or when asked to update brain), follow this process:
+
+#### 1. Get the WHAT (code changes)
+
+Read the actual diff, not just file names:
+
+```bash
+git diff HEAD -- ':(exclude)*.lock' ':(exclude)package-lock.json' ':(exclude)go.sum' 2>/dev/null | head -300
+git diff --cached -- ':(exclude)*.lock' ':(exclude)package-lock.json' ':(exclude)go.sum' 2>/dev/null | head -300
+git log --since="2 hours ago" --oneline --stat 2>/dev/null
+```
+
+#### 2. Filter for significance
+
+Skip the update if ALL changes are:
+- Formatting, linting, or whitespace only
+- Dependency version bumps with no behavior change
+- Renaming with no design reasoning
+- Changes to fewer than 3 lines with no architectural impact
+
+Continue only if at least one change involves a new feature, bug fix, architectural change, explicit decision, pattern change, or infrastructure change.
+
+#### 3. Categorize changes
+
+| Category | Brain pages to update |
+|----------|----------------------|
+| **New feature** | `history.md`, create `features/X.md`, maybe `architecture.md` |
+| **Bug fix** | `bugs.md`, update `features/X.md` if related |
+| **Decision** | `decisions.md`, link from `features/X.md` if related |
+| **Pattern change** | `patterns.md` |
+| **Stack/dependency change** | `index.md` |
+| **Architecture change** | `architecture.md` |
+| **Refactor** | `history.md`, `architecture.md` if structure changed |
+
+#### 4. Extract the WHY from conversation
+
+For each categorized change, look back through the conversation for the 5 event types listed in "During the Session" above. Match changes to reasoning.
+
+**If no WHY exists in the conversation** for a change: Do NOT invent one. Either:
+- Ask the user what drove the change
+- Or write the entry with just the WHAT and mark it: `**Context:** To be filled — reasoning not captured in session.`
+
+#### 5. Write updates
+
+For each page that needs updating:
+1. Read the current content.
+2. Add new entries at the top (newest first) for `history.md`, `decisions.md`, `bugs.md`.
+3. Replace in-place for `index.md`, `architecture.md`, `patterns.md`.
+4. Follow the format rules in this file. Every entry needs `**Date:** YYYY-MM-DD`.
+5. Add `[[wikilinks]]` to connect related entries across pages.
+6. If a significant new feature was built and no `features/X.md` exists, create one.
+
+**Writing rules:**
+- Lead with the WHY, not the WHAT. Bad: "Added Redis caching." Good: "Added Redis caching to avoid redundant API calls — same queries were hitting the API repeatedly, costing money and adding latency."
+- Include alternatives considered when available.
+- For bugs, always include root cause and lesson.
+- Keep entries to 1-3 short paragraphs. Brain is context, not documentation.
+
+#### 6. Commit separately
+
+```bash
+git add .brain/
+git commit -m "brain: <short summary>"
+```
+
+Never mix brain and code changes in the same commit. This gives teams clean separation:
+- `git log --grep="^brain:"` — only brain history
+- `git log --invert-grep --grep="^brain:"` — only code history
+
+### Before Session End
+
+If significant changes were made during the session, suggest updating brain. Be specific: "I'd capture the caching decision and the auth bug root cause — want me to update brain?"
+
+### Rules
+
+1. **Never hallucinate.** If you can't determine something from the repo or conversation, write "Unknown — to be filled by team" rather than guessing.
+2. **Be concise.** Each entry should be one paragraph or a short list. Brain is context, not documentation.
+3. **Explain WHY, not WHAT.** The code shows what. Brain pages explain why.
+4. **Use absolute dates.** Always `YYYY-MM-DD`. Never "yesterday" or "last week."
+5. **Don't duplicate README.** Reference it: "See README.md for setup instructions."
+6. **Respect existing content.** Preserve what others wrote. Add, don't replace (unless correcting errors).
+7. **Separate commits.** Always commit brain changes separately from code with prefix `brain:`.
+8. **Compaction.** When any page exceeds 30 entries or 150 lines, move entries older than 3 months to `.brain/archive/<page>-<year>.md`.
+
+---
 
 ## Directory Structure
 
 ```
 .brain/
+├── SCHEMA.md           # This file — format spec + LLM instructions
 ├── index.md            # Project overview — what, why, who, how
 ├── architecture.md     # Stack, structure, components, data flow
 ├── decisions.md        # Why things are the way they are (ADR-lite)
@@ -350,34 +467,7 @@ When a developer asks about a topic, the LLM:
 
 This is what makes `.brain/` a wiki, not a log.
 
-## Update Rules
-
-These rules tell the LLM when and how to update `.brain/` pages.
-
-### When to Update
-
-| Event | Pages to Update |
-|-------|-----------------|
-| New significant feature added | `history.md`, `architecture.md`, create `features/X.md` |
-| Architectural decision made | `decisions.md`, link from `features/X.md` if related |
-| Bug fixed (non-trivial) | `bugs.md`, `history.md`, update `features/X.md` if related, add [[wikilinks]] |
-| Coding pattern established or changed | `patterns.md` |
-| Major refactor | `architecture.md`, `history.md`, `decisions.md`, update affected `features/*.md` |
-| New team member onboarded | `index.md` (team section) |
-| Dependency added/removed | `index.md` (tech stack) |
-| Infrastructure change | `architecture.md` (infrastructure section) |
-
-### How to Update
-
-1. Read the existing page before modifying.
-2. Add new entries at the top (newest first) for `history.md`, `decisions.md`, `bugs.md`.
-3. Replace content in-place for `index.md`, `architecture.md`, `patterns.md`.
-4. Always update the `updated` date in frontmatter.
-5. Keep entries concise — one paragraph per entry is ideal.
-6. Write for a developer who has never seen this repo. Explain the WHY, not just the WHAT.
-7. Use absolute dates (2026-04-11), never relative (yesterday, last week).
-
-### Date Format (CRITICAL)
+## Date Format
 
 Every entry in `history.md`, `decisions.md`, `bugs.md`, and `features/*.md` timelines MUST have a `**Date:** YYYY-MM-DD` line immediately after the `## ` header. Full date required — never month-only (`2026-03`), never relative. This enables chronological sorting in the dashboard.
 
@@ -396,7 +486,7 @@ Content here...
 
 The date goes in a `**Date:**` field, not in the header. Headers are for titles only.
 
-### What NOT to Put in .brain/
+## What NOT to Put in .brain/
 
 - Code snippets longer than 5 lines (link to the file instead)
 - Secrets, API keys, credentials
@@ -404,24 +494,7 @@ The date goes in a `**Date:**` field, not in the header. Headers are for titles 
 - Speculative future plans (only record what IS, not what MIGHT BE)
 - Duplicate information already in README.md (reference it instead)
 
-## Git Conventions
-
-### Separate Commits
-
-Brain updates must be committed separately from code changes. Use the `brain:` prefix.
-
-```bash
-# After updating brain pages
-git add .brain/
-git commit -m "brain: record Redis caching decision"
-```
-
-This gives teams clean separation:
-- `git log --grep="^brain:"` — only brain history
-- `git log --invert-grep --grep="^brain:"` — only code history
-- PR diffs stay focused on code; brain changes are in their own commit
-
-### Compaction
+## Compaction
 
 When a page exceeds **30 entries** or **150 lines**, compact it:
 
@@ -445,26 +518,25 @@ Brain pages are designed to be merge-friendly:
 
 ## Platform Integration
 
-After brain init, these files tell each LLM tool to read `.brain/`:
+The repo's `CLAUDE.md`, `.cursor/rules`, and `AGENTS.md` point LLM tools to this file:
 
 **CLAUDE.md** (Claude Code):
 ```
 # Project Brain
-Read .brain/index.md at session start for full project context.
-Update .brain/ pages when making architectural decisions, fixing notable bugs, or establishing new patterns.
-See .brain/SCHEMA.md for format rules.
+Read .brain/SCHEMA.md at session start for instructions on working with this project's brain.
+Read .brain/index.md for project context.
 ```
 
 **.cursor/rules** (Cursor):
 ```
-Read .brain/index.md at session start for project context.
-Update .brain/ pages when making significant changes.
+Read .brain/SCHEMA.md at session start for instructions on working with this project's brain.
+Read .brain/index.md for project context.
 ```
 
 **AGENTS.md** (Codex):
 ```
-Read .brain/index.md at session start for project context.
-Update .brain/ pages when making significant changes.
+Read .brain/SCHEMA.md at session start for instructions on working with this project's brain.
+Read .brain/index.md for project context.
 ```
 
 ## Custom Pages

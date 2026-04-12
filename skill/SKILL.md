@@ -8,6 +8,8 @@ trigger: /brain
 
 Per-repo project memory tracked in git. Every developer who clones the repo gets full project context. Every LLM tool reads `.brain/` at session start and updates it as the project evolves.
 
+**How it works:** `.brain/SCHEMA.md` ships with the repo and contains everything an LLM needs — session behavior, update process, format rules. No local install required for basic brain functionality. This skill adds power commands on top.
+
 ## Usage
 
 ```
@@ -20,9 +22,7 @@ Per-repo project memory tracked in git. Every developer who clones the repo gets
 /brain history "<text>"   # Add a history entry
 /brain query "<question>" # Ask a question — search pages, follow links, synthesize answer
 /brain health             # Check brain health: stale pages, broken links, gaps
-/brain dashboard           # Generate interactive dashboard of all .brain/ entries
-/brain hooks install      # Install git hooks for auto-update reminders (opt-in)
-/brain hooks remove       # Remove brain git hooks
+/brain dashboard          # Generate interactive dashboard of all .brain/ entries
 ```
 
 ## What You Must Do When Invoked
@@ -177,7 +177,12 @@ Create the `.brain/` directory and all core pages.
 mkdir -p .brain/custom .brain/features .brain/archive
 ```
 
-For each page, use the analysis from Step 2 to generate content. Follow the format defined in `SCHEMA.md` (read it from `~/.claude/skills/brain/SCHEMA.md`).
+**Copy SCHEMA.md into the repo** so it ships with git:
+```bash
+cp ~/.claude/skills/brain/SCHEMA.md .brain/SCHEMA.md
+```
+
+For each page, use the analysis from Step 2 to generate content. Follow the format defined in `.brain/SCHEMA.md`.
 
 **Generation rules:**
 
@@ -209,7 +214,7 @@ For each page, use the analysis from Step 2 to generate content. Follow the form
 
 ### Step 4 — Install platform integration
 
-Detect which platform files exist and append brain instructions.
+Detect which platform files exist and create/append brain instructions.
 
 **CLAUDE.md:**
 ```bash
@@ -231,9 +236,41 @@ Create `.cursor/rules` if it doesn't exist, or append brain instructions.
 **AGENTS.md:**
 Create `AGENTS.md` if it doesn't exist, or append brain instructions.
 
-**Always add to .gitignore if needed — nothing to ignore, .brain/ is tracked.**
+### Step 5 — Offer local tool installation
 
-### Step 5 — Summary
+After creating `.brain/`, ask the user if they want to install brain tools locally:
+
+```
+.brain/ initialized with N pages.
+
+Would you also like to install brain tools locally? This adds:
+  - /brain commands (query, dashboard, health, status) in all repos
+  - Auto-update hook (checks for brain-worthy changes after each commit)
+
+These are optional — brain works without them via CLAUDE.md + SCHEMA.md.
+Install locally? (y/n)
+```
+
+**If yes:**
+1. Check if `~/.claude/skills/brain/` exists. If not, copy skill files:
+   ```bash
+   mkdir -p ~/.claude/skills/brain/templates
+   cp .brain/SCHEMA.md ~/.claude/skills/brain/SCHEMA.md
+   ```
+   The SKILL.md and templates must come from the brain repo install — guide the user to run the install script if not present.
+
+2. Install the auto-update hook in Claude Code settings:
+   ```bash
+   # Check if settings.json exists
+   cat ~/.claude/settings.json 2>/dev/null || echo "{}"
+   ```
+   Add the brain post-commit hook (see Command: hooks install for the hook definition).
+
+3. Add brain trigger to `~/.claude/CLAUDE.md` if not already present.
+
+**If no:** Skip. Brain still works — CLAUDE.md in the repo tells the LLM to read SCHEMA.md.
+
+### Step 6 — Summary
 
 Print a summary:
 
@@ -245,6 +282,7 @@ Print a summary:
   - patterns.md (coding conventions)
   - history.md (N milestones)
   - bugs.md (N bugs documented)
+  - SCHEMA.md (format rules + LLM instructions)
 
 Platform integration:
   - CLAUDE.md ✓
@@ -295,110 +333,18 @@ Custom pages: api-versioning.md, deployment.md
 
 ## Command: update
 
-Review what happened in the current session and update relevant `.brain/` pages. The goal is to capture the WHY behind changes — the reasoning, trade-offs, and context that git diff cannot show.
+Review what happened in the current session and update relevant `.brain/` pages.
 
-### Step 1 — Get the WHAT (code changes)
+Follow the update process defined in `.brain/SCHEMA.md` (section "Updating .brain/ — The Process"). The process covers:
 
-Read the actual diff, not just file names:
+1. Reading the actual diff (not just file names)
+2. Filtering for significance (skip trivial changes)
+3. Categorizing changes (feature, bug, decision, pattern, stack, architecture, refactor)
+4. Extracting the WHY from conversation (matching the 5 event types)
+5. Writing updates with proper format, dates, and `[[wikilinks]]`
+6. Committing separately with `brain:` prefix
 
-```bash
-git diff HEAD --stat 2>/dev/null
-git diff --cached --stat 2>/dev/null
-```
-
-Then read the full diff content for changed files (excluding generated/lock files):
-
-```bash
-git diff HEAD -- ':(exclude)*.lock' ':(exclude)package-lock.json' ':(exclude)go.sum' 2>/dev/null | head -300
-git diff --cached -- ':(exclude)*.lock' ':(exclude)package-lock.json' ':(exclude)go.sum' 2>/dev/null | head -300
-```
-
-Also check recent commits made during this session:
-
-```bash
-git log --since="2 hours ago" --oneline --stat 2>/dev/null
-```
-
-### Step 2 — Significance filter
-
-Not every change is brain-worthy. Skip the update (tell the user "no significant changes to record") if ALL changes are:
-- Formatting, linting, or whitespace only
-- Dependency version bumps with no behavior change
-- Renaming with no design reasoning
-- Changes to fewer than 3 lines with no architectural impact
-
-Continue only if at least one change involves:
-- New feature or endpoint
-- Bug fix with a root cause
-- Architectural change (new dependency, new layer, new integration)
-- A decision the user explicitly reasoned about
-- A pattern the team established or changed
-- Infrastructure or deployment change
-
-### Step 3 — Categorize each significant change
-
-For each significant change from the diff, assign a category:
-
-| Category | Signals in diff | Brain page |
-|----------|----------------|------------|
-| **New feature** | New files in feature directories, new routes/endpoints, new service | `history.md`, `features/X.md`, maybe `architecture.md` |
-| **Bug fix** | Changes in existing logic, fix in commit message, error handling added | `bugs.md`, `features/X.md` if related |
-| **Decision** | New dependency in go.mod/package.json, switched library, new pattern introduced | `decisions.md`, `features/X.md` if related |
-| **Pattern change** | New error handling approach, naming convention shift, new test pattern | `patterns.md` |
-| **Stack change** | New entry in go.mod/package.json/requirements.txt, new Docker service | `index.md` |
-| **Architecture change** | New directory structure, new middleware, new external integration | `architecture.md` |
-| **Refactor** | Moved code between files, restructured layers, no behavior change | `history.md`, `architecture.md` if structure changed |
-
-### Step 4 — Extract the WHY from conversation (CRITICAL)
-
-This is what makes brain valuable. The diff tells you WHAT changed. The conversation tells you WHY. For each categorized change, look back through the conversation for these **event types**:
-
-1. **A choice was made** — There were multiple possible approaches and one was picked. The reasoning may be explicit or implied. If the user picked from options you proposed, the rejected options are "alternatives considered."
-
-2. **Something broke and was understood** — A problem was reported, investigation happened, a root cause was found. Capture the full arc: symptom → investigation → root cause → fix → lesson.
-
-3. **Something was rejected** — The user said no to a suggestion, or an approach was tried and didn't work. The rejected path and the reason it was rejected are often more valuable than the chosen path.
-
-4. **A constraint shaped the implementation** — Performance, cost, compatibility, timeline, team size, legal requirements — anything that made the solution different from the "obvious" approach.
-
-5. **The system changed structurally** — New component, new integration, new layer, removed dependency. The reasoning for structural changes is the hardest to recover later.
-
-**If no WHY exists in the conversation** for a change: Do NOT invent one. Either:
-- Ask the user: "I see you added Redis caching — what drove that decision?"
-- Or write the entry with just the WHAT and mark it: `**Context:** To be filled — reasoning not captured in session.`
-
-### Step 5 — Read current brain pages and write updates
-
-For each page that needs updating:
-1. Read the current content.
-2. Add new entries at the top (newest first) for `history.md`, `decisions.md`, `bugs.md`.
-3. Replace in-place for `index.md`, `architecture.md`, `patterns.md`.
-4. Follow SCHEMA.md format strictly. Every entry needs `**Date:** YYYY-MM-DD`.
-5. Add `[[wikilinks]]` to connect related entries across pages. Every bug, decision, or history entry that relates to a tracked feature MUST link to `[[features/X.md]]`, and the feature page must link back.
-6. If a significant new feature was built and no `features/X.md` exists, create one.
-7. Write the updated files.
-
-**Writing rules for entries:**
-- Lead with the WHY, not the WHAT. Bad: "Added Redis caching." Good: "Added Redis caching to avoid redundant AI API calls — same product/market queries were hitting the API repeatedly, costing money and adding latency."
-- Include alternatives considered when available: `**Alternatives considered:** Memcached (simpler but no pub/sub), database caching (too slow for our p95 target).`
-- For bugs, always include the root cause and lesson: `**Lesson:** Never share mutable state between goroutines without synchronization.`
-- Keep entries to 1-3 short paragraphs. Brain is context, not documentation.
-
-### Step 6 — Commit brain changes separately
-
-```bash
-git add .brain/
-git commit -m "brain: <short summary of what changed>"
-```
-
-Examples:
-- `brain: record Redis caching decision and trade-offs`
-- `brain: document OAuth bug root cause and fix`
-- `brain: add payment feature page with initial timeline`
-
-Never mix brain and code changes in the same commit.
-
-### Step 7 — Show what was updated
+After completing the update, show what was changed:
 
 ```
 Updated .brain/:
@@ -710,92 +656,3 @@ Generate an interactive HTML dashboard showing all `.brain/` entries organized b
 
    Opened in browser.
    ```
-
----
-
-## Command: hooks install
-
-Install a git post-commit hook that reminds the LLM to check if brain pages need updating.
-
-### Steps
-
-1. Check if `.git/hooks/post-commit` exists. If it does, check if it already contains brain logic. If yes, skip.
-
-2. Create or append to `.git/hooks/post-commit`:
-
-```bash
-#!/bin/bash
-# brain: remind to update .brain/ after significant commits
-
-CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null)
-BRAIN_FILES=$(echo "$CHANGED_FILES" | grep "^\.brain/" || true)
-CODE_FILES=$(echo "$CHANGED_FILES" | grep -v "^\.brain/" || true)
-
-# If code changed but brain didn't, print reminder
-if [ -n "$CODE_FILES" ] && [ -z "$BRAIN_FILES" ]; then
-    CODE_COUNT=$(echo "$CODE_FILES" | wc -l | tr -d ' ')
-    if [ "$CODE_COUNT" -gt 3 ]; then
-        echo ""
-        echo "brain: $CODE_COUNT files changed without .brain/ update."
-        echo "       Consider running /brain update in your next session."
-    fi
-fi
-```
-
-3. Make executable:
-```bash
-chmod +x .git/hooks/post-commit
-```
-
-4. Confirm: `Installed post-commit hook. You'll see reminders when significant code changes don't include brain updates.`
-
----
-
-## Command: hooks remove
-
-Remove brain's git hook.
-
-### Steps
-
-1. Read `.git/hooks/post-commit`.
-2. Remove the brain section (between `# brain:` markers).
-3. If the file is now empty (only had brain hook), delete it.
-4. Confirm: `Removed brain post-commit hook.`
-
----
-
-## Session Behavior (Automatic)
-
-When `.brain/` exists in the current repo, the LLM should actively track reasoning throughout the session — not just at update time.
-
-### At Session Start
-1. Read `.brain/index.md` to understand the project.
-2. Based on the user's first task, read relevant pages (e.g., `architecture.md` for refactoring, `bugs.md` for debugging).
-3. If the task relates to a specific feature, check if `features/X.md` exists and read it for full context.
-
-### During Session — Track Reasoning
-The conversation is the only place where reasoning exists. Be aware of these moments as they happen:
-
-1. **A choice was made** — Multiple approaches existed, one was picked. Note what was chosen and what wasn't.
-2. **Something broke and was understood** — A bug was reported, investigated, and diagnosed. The full arc matters.
-3. **Something was rejected** — An approach was proposed and turned down. Why it was rejected is high-value context.
-4. **A constraint shaped the work** — Performance, cost, compatibility, time, team size — anything that steered the implementation away from the default approach.
-5. **The system changed structurally** — New component, integration, or dependency. Structural reasoning is the hardest to recover later.
-
-You don't need to write anything during the session — just recognize these moments so you can reference them at `/brain update` time.
-
-### Before Session End (if significant changes were made)
-Suggest running `/brain update` to capture what happened. Be specific about what you'd record: "I'd capture the Redis caching decision and the webhook bug root cause — want me to run `/brain update`?"
-
----
-
-## Important Rules
-
-1. **Never hallucinate content.** If you can't determine something from the repo, write "Unknown — to be filled by team" rather than guessing.
-2. **Be concise.** Each entry should be one paragraph or a short list. `.brain/` is not documentation — it's context.
-3. **Explain WHY, not WHAT.** The code shows what. Brain pages explain why.
-4. **Use absolute dates.** Never "yesterday" or "last week". Always `2026-04-11`.
-5. **Don't duplicate README.** Reference it: "See README.md for setup instructions."
-6. **Respect existing content.** When updating, preserve what others wrote. Add, don't replace (unless correcting errors).
-7. **Separate commits.** Always commit brain changes separately from code with prefix `brain:`. Never mix brain and code in the same commit. This keeps PR diffs clean and lets teams filter brain history with `git log --grep="^brain:"`.
-8. **Compaction.** When any page exceeds 30 entries or 150 lines, compact it: move entries older than 3 months to `.brain/archive/<page>-<year>.md`, keep a one-line summary in the active page pointing to the archive. Active pages stay fast to read; full history is still in git.
