@@ -20,6 +20,7 @@ Per-repo project memory tracked in git. Every developer who clones the repo gets
 /brain history "<text>"   # Add a history entry
 /brain query "<question>" # Ask a question — search pages, follow links, synthesize answer
 /brain health             # Check brain health: stale pages, broken links, gaps
+/brain graph              # Generate interactive D3 graph visualization of .brain/
 /brain hooks install      # Install git hooks for auto-update reminders (opt-in)
 /brain hooks remove       # Remove brain git hooks
 ```
@@ -450,6 +451,129 @@ Suggestions:
   - Add [[wikilinks]] to connect orphan entries
   - Run compaction on history.md (move pre-2026 entries to archive/)
 ```
+
+---
+
+## Command: graph
+
+Generate an interactive D3.js force-directed graph showing all brain entries and their `[[wikilink]]` connections. Outputs a standalone HTML file — no server needed, just open in a browser.
+
+### Usage
+```
+/brain graph
+```
+
+### Steps
+
+1. **Check existence.** If no `.brain/`, tell user to run `/brain init`.
+
+2. **Read all .brain/ pages.** Read every `.brain/**/*.md` file including `features/`, `custom/`, and `archive/`.
+
+3. **Extract nodes.** For each page, create nodes from:
+
+   **Page-level nodes** (one per file):
+   - `index.md` → node with type `index`
+   - `architecture.md` → node with type `architecture`
+   - `patterns.md` → node with type `pattern`
+   - `features/*.md` → node with type `feature`
+
+   **Entry-level nodes** (one per `## ` section within a page):
+   - Each `## ` section in `decisions.md` → node with type `decision`
+   - Each `## ` section in `bugs.md` → node with type `bug`
+   - Each `## ` section in `history.md` → node with type `history`
+
+   **Node format:**
+   ```json
+   {
+     "id": "decisions.md#chose-redis-queue",
+     "label": "Chose Redis queue for webhooks",
+     "type": "decision",
+     "content": "First 120 chars of the section content...",
+     "date": "2026-01-15",
+     "file": "decisions.md"
+   }
+   ```
+
+   **ID convention:** `filename.md` for page-level nodes, `filename.md#anchor` for entry-level nodes. Anchors are the section header lowercased and hyphenated.
+
+4. **Extract edges.** For each `[[wikilink]]` found in any page:
+   - `[[page.md]]` → edge from current node to the page-level node
+   - `[[page.md#anchor]]` → edge from current node to the specific entry node
+   - If a `## ` section mentions a feature/component by name (even without a wikilink), create an implicit edge with a dashed style
+
+   **Edge format:**
+   ```json
+   {
+     "source": "features/webhook-delivery.md",
+     "target": "decisions.md#chose-redis-queue"
+   }
+   ```
+
+5. **Also extract implicit connections.** Scan entry content for references to other entries by keyword matching:
+   - If a bug entry mentions "webhook" and there's a `features/webhook-delivery.md`, create an implicit edge
+   - If a history entry mentions "Redis" and there's a decision about Redis, create an implicit edge
+   - Only create implicit edges when confidence is high (exact feature name or unique technical term match)
+
+6. **Read the graph template.** Read `~/.claude/skills/brain/templates/graph.html`.
+
+7. **Replace placeholders.** In the template:
+   - `{{PROJECT_NAME}}` → project name from `.brain/index.md` title
+   - `{{GRAPH_JSON}}` → the JSON object with `nodes` and `edges` arrays
+   - `{{NODE_COUNT}}` → total number of nodes
+   - `{{EDGE_COUNT}}` → total number of edges
+
+8. **Write output file.**
+   ```bash
+   # Write to .brain/graph.html
+   ```
+   Write the filled template to `.brain/graph.html`.
+
+9. **Open in browser.**
+   ```bash
+   open .brain/graph.html      # macOS
+   xdg-open .brain/graph.html  # Linux
+   ```
+
+10. **Add to .gitignore.** Add `graph.html` to `.brain/.gitignore` if not already there (the graph is generated, not source):
+    ```bash
+    echo "graph.html" >> .brain/.gitignore
+    ```
+
+11. **Confirm:**
+    ```
+    Generated .brain/graph.html with N nodes and M edges.
+    Opened in browser.
+
+    Node breakdown:
+      Features: 5    Decisions: 8    Bugs: 3
+      History: 12    Architecture: 1  Patterns: 1
+
+    Tip: Use the filter buttons to focus on specific types.
+         Hover over nodes to see connections.
+         Search to find specific entries.
+    ```
+
+### Visual Design
+
+The graph uses a dark theme (background #0A0E27) with color-coded nodes:
+
+| Type | Color | Size | Description |
+|------|-------|------|-------------|
+| Feature | Blue `#3B82F6` | Large (14px) | Hub nodes — lifecycle pages |
+| Decision | Green `#10B981` | Medium (10px) | Architectural choices |
+| Bug | Red `#EF4444` | Medium (10px) | Bug fixes with root cause |
+| History | Purple `#8B5CF6` | Small (8px) | Timeline milestones |
+| Architecture | Amber `#F59E0B` | Large (12px) | System structure |
+| Pattern | Pink `#EC4899` | Medium (9px) | Coding conventions |
+| Index | Gray `#64748B` | Largest (16px) | Project overview hub |
+
+**Interactions:**
+- **Hover** a node → highlights connected nodes, dims others, shows tooltip with content preview
+- **Click & drag** → reposition nodes
+- **Search** → filters nodes by label/content, highlights matches and their neighbors
+- **Filter buttons** → show only one type and its connections
+- **Scroll** → zoom in/out
+- **Pan** → click and drag on empty space
 
 ---
 

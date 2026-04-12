@@ -79,6 +79,7 @@ Restart your Claude Code session after installing.
 /brain update       Review session changes and update relevant pages
 /brain query "X"    Ask a question — searches across all pages, follows [[wikilinks]]
 /brain health       Check for stale pages, broken links, compaction needed
+/brain graph        Generate interactive D3.js graph visualization
 ```
 
 ### Quick Commands
@@ -148,6 +149,18 @@ This keeps PR diffs clean. Filter commits:
 git log --grep="^brain:"                    # only brain updates
 git log --invert-grep --grep="^brain:"      # only code changes
 ```
+
+## Graph Visualization
+
+`/brain graph` generates a standalone HTML file with an interactive D3.js force-directed graph. No server needed — just opens in your browser.
+
+- **Color-coded nodes** — Features (blue), Decisions (green), Bugs (red), History (purple), Architecture (amber), Patterns (pink)
+- **Hover** to see content preview and connections
+- **Search** to find specific entries and highlight their neighborhood
+- **Filter** by type to focus on decisions, bugs, or features
+- **Drag** nodes to rearrange, scroll to zoom
+
+The graph shows how brain entries connect through `[[wikilinks]]` — making the relationships between features, decisions, and bugs visible at a glance.
 
 ## Platform Support
 
