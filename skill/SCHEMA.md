@@ -147,7 +147,7 @@ Shipped core API with user auth, project CRUD, and webhook integrations.
 
 ### architecture.md
 
-System structure and component relationships.
+System structure and component relationships. This page must be built from reading actual code, not guessed from folder names.
 
 ```markdown
 ---
@@ -161,6 +161,38 @@ updated: 2026-04-11
 
 Monolith with clean internal boundaries. Three-layer architecture:
 HTTP handlers → Service layer → Repository layer.
+
+## System Schema
+
+```
+┌─────────────────────────────────────────────────────┐
+│                     Client (Browser)                 │
+└──────────────────────┬──────────────────────────────┘
+                       │ HTTPS
+┌──────────────────────▼──────────────────────────────┐
+│                    API Gateway                       │
+│  ┌─────────┐ ┌──────────┐ ┌─────────┐ ┌─────────┐  │
+│  │  Auth   │→│  Rate    │→│ Logging │→│ Handler │  │
+│  │Middleware│ │  Limit   │ │         │ │         │  │
+│  └─────────┘ └──────────┘ └─────────┘ └────┬────┘  │
+└────────────────────────────────────────────┬────────┘
+                                             │
+┌────────────────────────────────────────────▼────────┐
+│                  Service Layer                       │
+│  ┌──────────┐  ┌──────────┐  ┌──────────────────┐   │
+│  │  Auth    │  │ Discovery│  │  Scoring          │   │
+│  │ Service  │  │ Pipeline │  │  Service          │   │
+│  └────┬─────┘  └────┬─────┘  └────┬─────────────┘   │
+└───────┼──────────────┼─────────────┼────────────────┘
+        │              │             │
+┌───────▼──────────────▼─────────────▼────────────────┐
+│              Data / External Layer                    │
+│  ┌────────┐ ┌───────┐ ┌──────────┐ ┌────────────┐   │
+│  │PostgreSQL│ │ Redis │ │ Azure AI │ │ Comtrade   │   │
+│  │  (pgx)  │ │(cache)│ │ (OpenAI) │ │ Google API │   │
+│  └────────┘ └───────┘ └──────────┘ └────────────┘   │
+└─────────────────────────────────────────────────────┘
+```
 
 ## Components
 
@@ -180,6 +212,16 @@ Migrations managed by golang-migrate, stored in `migrations/`.
 
 Request → Chi Router → Auth Middleware → Handler → Service → Repository → PostgreSQL
                                                           ↘ Redis (cache)
+
+## External Integrations
+
+| Service | Purpose | Required |
+|---------|---------|----------|
+| PostgreSQL 16 | Primary database | Yes |
+| Redis 7 | AI response caching, rate limiting | Yes |
+| Azure OpenAI | Classification, scoring, analysis | Yes (at least one AI provider) |
+| Comtrade API | UN trade statistics | Yes |
+| Google Places | Business enrichment | Optional |
 
 ## Infrastructure
 

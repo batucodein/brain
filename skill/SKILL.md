@@ -55,7 +55,9 @@ git log --oneline -1 2>/dev/null && echo "HAS_HISTORY" || echo "NO_HISTORY"
 
 **If NO_HISTORY (new repo):** Skip to Step 3 with empty/minimal content for all pages.
 
-**If HAS_HISTORY:** Gather context from the repo. Run these in parallel:
+**If HAS_HISTORY:** Run a comprehensive analysis. This is the most important step — the quality of the brain depends on how deeply you understand the codebase. Use the Agent tool or run multiple reads in parallel.
+
+**Phase A — Surface scan (run in parallel):**
 
 **2a. Repo structure:**
 ```bash
@@ -69,30 +71,103 @@ ls -la go.mod go.sum package.json tsconfig.json Cargo.toml Gemfile requirements.
 
 **2c. Existing documentation:**
 ```bash
-cat README.md 2>/dev/null | head -100
-cat CONTRIBUTING.md 2>/dev/null | head -50
-cat CHANGELOG.md 2>/dev/null | head -50
+cat README.md 2>/dev/null | head -200
+cat CONTRIBUTING.md 2>/dev/null | head -100
+cat CHANGELOG.md 2>/dev/null | head -100
 ls docs/ 2>/dev/null | head -20
 ls doc/ 2>/dev/null | head -20
 ```
 
-**2d. Git history:**
+**2d. Git history (comprehensive):**
 ```bash
-git log --oneline -50
+git log --oneline -100
 git log --format="%an" | sort -u
-git tag -l --sort=-version:refname | head -10
-git log --diff-filter=A --summary --format="" -- "*.go" "*.py" "*.ts" "*.js" "*.java" "*.rs" | head -30
+git tag -l --sort=-version:refname | head -20
 ```
 
-**2e. Key entry points (read first 30 lines of likely entry files):**
-Read files matching: `main.go`, `cmd/*/main.go`, `src/main.*`, `app.py`, `index.ts`, `index.js`, `src/index.*`, `src/app.*`, `Main.java`, `Program.cs`, `lib.rs`.
-
-**2f. Database/infrastructure signals:**
+**2e. Infrastructure:**
 ```bash
-ls migrations/ 2>/dev/null | head -10
-ls internal/repo/ 2>/dev/null || ls src/repository/ 2>/dev/null || ls models/ 2>/dev/null
-cat docker-compose.yml 2>/dev/null | head -40
+cat docker-compose.yml 2>/dev/null
+cat Dockerfile 2>/dev/null | head -30
+ls .github/workflows/ 2>/dev/null
+ls migrations/ 2>/dev/null | head -20
 ```
+
+**Phase B — Deep code analysis (CRITICAL — this is what makes the brain useful):**
+
+After Phase A, you know the language and structure. Now read the actual code:
+
+**2f. Entry points — read FULL files, not just first 30 lines:**
+Read the main entry point(s): `main.go`, `cmd/*/main.go`, `app.py`, `index.ts`, `src/main.*`, `Main.java`, `Program.cs`, `lib.rs`. This shows how the app boots, what dependencies it wires up, and the high-level structure.
+
+**2g. Route definitions / API surface:**
+Find and read the file(s) that define routes, endpoints, or URL patterns:
+- Go: grep for `router`, `mux`, `Handle`, `Route` in server files
+- Python: grep for `@app.route`, `urlpatterns`, `router`
+- Node/TS: grep for `app.get`, `app.post`, `router.`, `createTRPCRouter`
+- Java: grep for `@GetMapping`, `@PostMapping`, `@RequestMapping`
+
+Read these files fully — they map the entire API surface and reveal every feature.
+
+**2h. Domain/model layer:**
+Read the files that define core business entities:
+- Go: `internal/domain/`, `models/`, `types/`
+- Python: `models.py`, `schemas.py`, `domain/`
+- TS: `types/`, `models/`, `prisma/schema.prisma`
+- Java: `domain/`, `entity/`, `model/`
+
+These show what the system actually manages.
+
+**2i. Service/business logic layer:**
+Read 3-5 key service files (the ones with the most logic, not just CRUD). Look in:
+- `internal/service/`, `services/`, `use_cases/`, `internal/*/handler.go`
+- Read enough to understand what each major feature DOES, not just what files exist
+
+**2j. Database schema:**
+Read migration files or schema definitions to understand the data model:
+```bash
+ls migrations/ 2>/dev/null && cat migrations/*up*.sql 2>/dev/null | head -200
+cat prisma/schema.prisma 2>/dev/null
+cat db/schema.rb 2>/dev/null | head -200
+```
+
+**2k. Bug extraction from git (thorough):**
+```bash
+git log --oneline --all --grep="fix" --grep="bug" --grep="hotfix" --grep="patch" --grep="crash" --grep="race" --grep="leak" --grep="broken" --grep="revert" -i | head -30
+```
+For the top 5 most significant-looking fixes, read the commit message AND the diff:
+```bash
+git show <commit-hash> --stat
+git show <commit-hash> -- '*.go' '*.py' '*.ts' '*.js' | head -80
+```
+This reveals actual root causes and fixes, not just commit titles.
+
+**2l. Feature identification from git:**
+```bash
+git log --oneline --all --grep="feat" --grep="add" --grep="implement" --grep="new" -i | head -30
+```
+Cross-reference with the directory structure: each major directory under `internal/`, `src/`, or `app/` likely represents a feature. For each, check git log for that path:
+```bash
+git log --oneline -- <path> | head -10
+```
+
+**Phase C — Architecture mapping:**
+
+After reading the code, map the actual architecture — not guessed from folder names, but understood from how components call each other:
+
+**2m. Dependency flow:**
+From the entry point and route handlers, trace how a request flows:
+- Which handler calls which service?
+- Which service calls which repository/external API?
+- What middleware is in the chain?
+- What async/background processing exists?
+
+**2n. External integrations:**
+Find all external API calls, third-party SDKs, message queues, etc. Grep for:
+```bash
+grep -rl "http.Get\|http.Post\|fetch(\|axios\|requests.get\|NewClient" --include="*.go" --include="*.py" --include="*.ts" --include="*.js" . 2>/dev/null | head -20
+```
+Read these files to understand what external services the app talks to.
 
 ### Step 3 — Generate .brain/ pages
 
@@ -107,12 +182,28 @@ For each page, use the analysis from Step 2 to generate content. Follow the form
 **Generation rules:**
 
 - **index.md**: Synthesize from README + repo structure + config files. Include: what the project does, tech stack, key directories, team (from git authors).
-- **architecture.md**: Infer from directory structure, entry points, config files. Describe components, layers, data flow, infrastructure.
-- **decisions.md**: Extract from README mentions of "chose", "decided", "why", "instead of". Check for ADR directories (`docs/adr/`, `doc/decisions/`). If no explicit decisions found, start with one entry: "Initial architecture" describing the stack choices.
-- **patterns.md**: Infer from code style: error handling patterns, naming conventions, test structure. Scan 3-5 representative source files.
-- **history.md**: Build from git tags and significant commits. Group by month or milestone.
-- **bugs.md**: Start mostly empty. Check git log for messages containing "fix", "bug", "hotfix" — summarize the 3-5 most significant ones if found.
-- **features/*.md**: Identify 3-5 major features from the codebase (key directories, significant commit clusters, README feature descriptions). Create one page per feature with overview, timeline from git history, current state, and key files. Add `[[wikilinks]]` between feature pages and any related entries in decisions.md, bugs.md, history.md.
+
+- **architecture.md**: Build from the actual code analysis (Phase B+C), NOT from folder names. Must include:
+  - How the app boots (from entry point reading)
+  - Request flow: from HTTP entry → middleware → handler → service → repo → DB/external
+  - All external integrations discovered in step 2n
+  - Infrastructure from docker-compose, CI configs, Dockerfiles
+  - Data model summary from migration/schema reading
+
+- **decisions.md**: Extract from README mentions of "chose", "decided", "why", "instead of". Check for ADR directories (`docs/adr/`, `doc/decisions/`). Also infer decisions from the code: if the stack uses Redis, that was a decision. If there's a custom auth middleware instead of a library, that was a decision. Each entry needs `**Date:** YYYY-MM-DD` — use the earliest git commit date related to that decision.
+
+- **patterns.md**: Infer from the actual code read in Phase B: error handling patterns, naming conventions, test structure, dependency injection approach, data fetching patterns.
+
+- **history.md**: Build from git tags, significant commits, and README changelog if present. Each entry needs `**Date:** YYYY-MM-DD`.
+
+- **bugs.md**: Use the thorough bug extraction from step 2k. For each significant bug found in git history, read the commit diff to extract: symptom, root cause, fix, and lesson. Each entry needs `**Date:** YYYY-MM-DD`. If no bugs found in git, start empty.
+
+- **features/*.md**: Create one page per major feature identified in step 2l. Each feature page must include:
+  - Overview: what it does (from reading the actual service/handler code)
+  - Timeline: key commits from `git log -- <path>` with `**Date:** YYYY-MM-DD`
+  - Current state: working/in-progress/deprecated
+  - Key files: list the actual source files
+  - `[[wikilinks]]` to related entries in decisions.md, bugs.md, history.md
 
 **After generating pages, tell the user what was created and offer to review each page.**
 
