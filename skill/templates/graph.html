@@ -100,6 +100,30 @@
     border-radius: 50%;
   }
 
+  .view-toggle {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    padding: 6px 14px;
+    color: #CBD5E1;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-right: 8px;
+  }
+
+  .view-toggle:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #FFFFFF;
+  }
+
+  .view-toggle.active-timeline {
+    border-color: #8B5CF6;
+    color: #FFFFFF;
+    background: rgba(139, 92, 246, 0.15);
+  }
+
   #graph {
     width: 100vw;
     height: 100vh;
@@ -115,6 +139,30 @@
   .link {
     stroke-opacity: 0.4;
     stroke-width: 1.5;
+  }
+
+  .timeline-axis line {
+    stroke: rgba(255, 255, 255, 0.08);
+    stroke-width: 1;
+  }
+
+  .timeline-axis text {
+    fill: #475569;
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .timeline-lane-label {
+    fill: #334155;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .timeline-lane-line {
+    stroke: rgba(255, 255, 255, 0.03);
+    stroke-width: 1;
   }
 
   #tooltip {
@@ -207,6 +255,7 @@
 <div id="header">
   <h1>{{PROJECT_NAME}} <span>brain graph</span></h1>
   <div id="controls">
+    <button class="view-toggle" id="viewToggle">Timeline</button>
     <input type="text" id="search" placeholder="Search nodes...">
     <button class="filter-btn active" data-type="all">All</button>
     <button class="filter-btn" data-type="feature" style="--btn-color: #3B82F6; --btn-bg: rgba(59,130,246,0.15)">
@@ -276,14 +325,18 @@ const TYPE_RADIUS = {
   custom: 8
 };
 
+const LANE_ORDER = ['feature', 'architecture', 'decision', 'pattern', 'history', 'bug', 'index', 'custom'];
+
 const width = window.innerWidth;
 const height = window.innerHeight;
+let isTimeline = false;
 
 const svg = d3.select('#graph')
   .attr('width', width)
   .attr('height', height);
 
 const g = svg.append('g');
+const timelineGroup = g.append('g').attr('class', 'timeline-layer').style('opacity', 0);
 
 // Zoom
 const zoom = d3.zoom()
@@ -291,6 +344,78 @@ const zoom = d3.zoom()
   .on('zoom', (event) => g.attr('transform', event.transform));
 
 svg.call(zoom);
+
+// Parse dates for timeline
+function parseDate(dateStr) {
+  if (!dateStr) return null;
+  const parts = dateStr.match(/(\d{4})-?(\d{2})?-?(\d{2})?/);
+  if (!parts) return null;
+  const y = parseInt(parts[1]);
+  const m = parts[2] ? parseInt(parts[2]) - 1 : 0;
+  const d = parts[3] ? parseInt(parts[3]) : 1;
+  return new Date(y, m, d);
+}
+
+// Build timeline scale
+const dates = GRAPH_DATA.nodes.map(n => parseDate(n.date)).filter(Boolean);
+const minDate = d3.min(dates) || new Date();
+const maxDate = d3.max(dates) || new Date();
+const padding = (maxDate - minDate) * 0.1 || 86400000 * 30;
+const timeScale = d3.scaleTime()
+  .domain([new Date(minDate - padding), new Date(maxDate.getTime() + padding)])
+  .range([160, width - 80]);
+
+// Lane positions (y-axis by type)
+const laneHeight = (height - 140) / LANE_ORDER.length;
+function laneY(type) {
+  const idx = LANE_ORDER.indexOf(type);
+  return 80 + (idx >= 0 ? idx : LANE_ORDER.length - 1) * laneHeight + laneHeight / 2;
+}
+
+// Draw timeline elements (hidden initially)
+function drawTimelineAxis() {
+  timelineGroup.selectAll('*').remove();
+
+  // Time axis
+  const axisG = timelineGroup.append('g')
+    .attr('class', 'timeline-axis')
+    .attr('transform', `translate(0, ${height - 50})`);
+
+  const axis = d3.axisBottom(timeScale)
+    .ticks(d3.timeMonth.every(1))
+    .tickFormat(d3.timeFormat('%b %Y'))
+    .tickSize(-(height - 130));
+
+  axisG.call(axis);
+  axisG.selectAll('.domain').attr('stroke', 'rgba(255,255,255,0.06)');
+  axisG.selectAll('.tick line')
+    .attr('stroke', 'rgba(255,255,255,0.04)')
+    .attr('stroke-dasharray', '2,4');
+  axisG.selectAll('.tick text')
+    .attr('fill', '#475569')
+    .attr('font-size', '11px');
+
+  // Lane labels
+  LANE_ORDER.forEach((type, i) => {
+    const y = 80 + i * laneHeight + laneHeight / 2;
+    timelineGroup.append('text')
+      .attr('class', 'timeline-lane-label')
+      .attr('x', 20)
+      .attr('y', y + 4)
+      .text(type);
+
+    if (i > 0) {
+      timelineGroup.append('line')
+        .attr('class', 'timeline-lane-line')
+        .attr('x1', 0)
+        .attr('x2', width)
+        .attr('y1', 80 + i * laneHeight)
+        .attr('y2', 80 + i * laneHeight);
+    }
+  });
+}
+
+drawTimelineAxis();
 
 // Simulation
 const simulation = d3.forceSimulation(GRAPH_DATA.nodes)
@@ -365,7 +490,7 @@ node.on('mouseover', (event, d) => {
   tooltip.select('.tt-type').text(d.type).style('color', color);
   tooltip.select('.tt-title').text(d.label);
   tooltip.select('.tt-content').text(d.content || '');
-  tooltip.select('.tt-date').text(d.date ? 'Updated: ' + d.date : '');
+  tooltip.select('.tt-date').text(d.date ? 'Date: ' + d.date : '');
 
   const linkedNodes = GRAPH_DATA.edges
     .filter(e => (e.source.id || e.source) === d.id || (e.target.id || e.target) === d.id)
@@ -406,6 +531,7 @@ node.on('mouseover', (event, d) => {
 
 // Simulation tick
 simulation.on('tick', () => {
+  if (isTimeline) return;
   link
     .attr('x1', d => d.source.x)
     .attr('y1', d => d.source.y)
@@ -415,19 +541,85 @@ simulation.on('tick', () => {
   node.attr('transform', d => `translate(${d.x},${d.y})`);
 });
 
+// Timeline mode
+function switchToTimeline() {
+  isTimeline = true;
+  simulation.stop();
+
+  timelineGroup.transition().duration(600).style('opacity', 1);
+
+  // Calculate target positions
+  GRAPH_DATA.nodes.forEach(d => {
+    const date = parseDate(d.date);
+    d.tx = date ? timeScale(date) : width / 2;
+    d.ty = laneY(d.type);
+  });
+
+  // Nudge overlapping nodes in same lane+date
+  const buckets = {};
+  GRAPH_DATA.nodes.forEach(d => {
+    const key = `${d.type}-${Math.round(d.tx / 30)}`;
+    if (!buckets[key]) buckets[key] = [];
+    buckets[key].push(d);
+  });
+  Object.values(buckets).forEach(group => {
+    if (group.length > 1) {
+      const spread = Math.min(laneHeight * 0.6, group.length * 25);
+      group.forEach((d, i) => {
+        d.ty += (i - (group.length - 1) / 2) * (spread / group.length);
+      });
+    }
+  });
+
+  // Animate nodes to timeline positions
+  node.transition().duration(800).ease(d3.easeCubicInOut)
+    .attr('transform', d => `translate(${d.tx},${d.ty})`);
+
+  link.transition().duration(800).ease(d3.easeCubicInOut)
+    .attr('x1', d => d.source.tx)
+    .attr('y1', d => d.source.ty)
+    .attr('x2', d => d.target.tx)
+    .attr('y2', d => d.target.ty);
+}
+
+function switchToForce() {
+  isTimeline = false;
+
+  timelineGroup.transition().duration(400).style('opacity', 0);
+
+  simulation.alpha(0.8).restart();
+}
+
+// View toggle
+document.getElementById('viewToggle').addEventListener('click', () => {
+  const btn = document.getElementById('viewToggle');
+  if (isTimeline) {
+    btn.textContent = 'Timeline';
+    btn.classList.remove('active-timeline');
+    switchToForce();
+  } else {
+    btn.textContent = 'Force';
+    btn.classList.add('active-timeline');
+    switchToTimeline();
+  }
+});
+
 // Drag
 function dragstarted(event) {
+  if (isTimeline) return;
   if (!event.active) simulation.alphaTarget(0.3).restart();
   event.subject.fx = event.subject.x;
   event.subject.fy = event.subject.y;
 }
 
 function dragged(event) {
+  if (isTimeline) return;
   event.subject.fx = event.x;
   event.subject.fy = event.y;
 }
 
 function dragended(event) {
+  if (isTimeline) return;
   if (!event.active) simulation.alphaTarget(0);
   event.subject.fx = null;
   event.subject.fy = null;
@@ -450,7 +642,6 @@ document.getElementById('search').addEventListener('input', (e) => {
     }
   });
 
-  // Also highlight connected nodes
   const expandedIds = new Set(matchIds);
   GRAPH_DATA.edges.forEach(e => {
     const sid = e.source.id || e.source;
@@ -505,9 +696,17 @@ document.querySelectorAll('.filter-btn').forEach(btn => {
 
 // Responsive
 window.addEventListener('resize', () => {
-  svg.attr('width', window.innerWidth).attr('height', window.innerHeight);
-  simulation.force('center', d3.forceCenter(window.innerWidth / 2, window.innerHeight / 2));
-  simulation.alpha(0.3).restart();
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  svg.attr('width', w).attr('height', h);
+  timeScale.range([160, w - 80]);
+  drawTimelineAxis();
+  if (!isTimeline) {
+    simulation.force('center', d3.forceCenter(w / 2, h / 2));
+    simulation.alpha(0.3).restart();
+  } else {
+    switchToTimeline();
+  }
 });
 </script>
 </body>
