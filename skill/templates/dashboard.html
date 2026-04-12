@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{PROJECT_NAME}} — brain</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0A0E27;
+    color: #E0E0E0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  #header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    padding: 20px 32px;
+    background: rgba(10, 14, 39, 0.92);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  #header h1 {
+    font-size: 18px;
+    font-weight: 700;
+    color: #FFFFFF;
+    letter-spacing: -0.02em;
+  }
+
+  #header h1 span {
+    color: #64748B;
+    font-weight: 400;
+    margin-left: 8px;
+  }
+
+  #header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  #search {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 10px 16px;
+    color: #E0E0E0;
+    font-size: 13px;
+    width: 280px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  #search:focus {
+    border-color: rgba(255, 255, 255, 0.25);
+  }
+
+  #search::placeholder {
+    color: #475569;
+  }
+
+  #stats-bar {
+    font-size: 12px;
+    color: #475569;
+  }
+
+  .main {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 32px;
+    display: flex;
+    gap: 28px;
+  }
+
+  .sidebar {
+    width: 200px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 90px;
+    height: fit-content;
+  }
+
+  .sidebar-nav {
+    list-style: none;
+  }
+
+  .sidebar-nav li {
+    margin-bottom: 2px;
+  }
+
+  .sidebar-nav a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    text-decoration: none;
+    color: #94A3B8;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.15s;
+  }
+
+  .sidebar-nav a:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: #E0E0E0;
+  }
+
+  .sidebar-nav a.active {
+    background: rgba(255, 255, 255, 0.08);
+    color: #FFFFFF;
+  }
+
+  .nav-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .nav-count {
+    margin-left: auto;
+    font-size: 11px;
+    color: #475569;
+    font-weight: 400;
+  }
+
+  .content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .section {
+    margin-bottom: 40px;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .section-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .section-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #FFFFFF;
+    letter-spacing: -0.01em;
+  }
+
+  .section-count {
+    font-size: 12px;
+    color: #475569;
+    margin-left: auto;
+  }
+
+  .card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 14px;
+    padding: 20px 24px;
+    margin-bottom: 12px;
+    transition: all 0.2s;
+    cursor: default;
+  }
+
+  .card:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+
+  .card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #FFFFFF;
+  }
+
+  .card-date {
+    font-size: 11px;
+    color: #475569;
+    font-weight: 500;
+    background: rgba(255, 255, 255, 0.04);
+    padding: 3px 10px;
+    border-radius: 6px;
+    flex-shrink: 0;
+    margin-left: 12px;
+  }
+
+  .card-content {
+    font-size: 13px;
+    color: #94A3B8;
+    line-height: 1.7;
+  }
+
+  .card-meta {
+    margin-top: 12px;
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .card-tag {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-weight: 500;
+  }
+
+  .tag-context { background: rgba(59, 130, 246, 0.1); color: #60A5FA; }
+  .tag-decision { background: rgba(16, 185, 129, 0.1); color: #34D399; }
+  .tag-status { background: rgba(139, 92, 246, 0.1); color: #A78BFA; }
+  .tag-fix { background: rgba(239, 68, 68, 0.1); color: #F87171; }
+  .tag-lesson { background: rgba(245, 158, 11, 0.1); color: #FBBF24; }
+  .tag-symptom { background: rgba(236, 72, 153, 0.1); color: #F472B6; }
+
+  .card-links {
+    margin-top: 10px;
+    font-size: 11px;
+    color: #475569;
+  }
+
+  .card-links a {
+    color: #64748B;
+    text-decoration: none;
+    border-bottom: 1px dashed #475569;
+    transition: color 0.15s;
+  }
+
+  .card-links a:hover {
+    color: #94A3B8;
+  }
+
+  .overview-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .overview-item {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 12px;
+    padding: 16px 20px;
+  }
+
+  .overview-label {
+    font-size: 11px;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .overview-value {
+    font-size: 13px;
+    color: #CBD5E1;
+    line-height: 1.6;
+  }
+
+  .timeline-dot {
+    position: relative;
+    padding-left: 24px;
+  }
+
+  .timeline-dot::before {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 8px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--dot-color, #475569);
+  }
+
+  .timeline-dot::after {
+    content: '';
+    position: absolute;
+    left: 7px;
+    top: 20px;
+    width: 2px;
+    bottom: -12px;
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .timeline-dot:last-child::after {
+    display: none;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: #475569;
+    font-size: 13px;
+  }
+
+  .hidden {
+    display: none;
+  }
+
+  @media (max-width: 768px) {
+    .main { flex-direction: column; padding: 16px; }
+    .sidebar { width: 100%; position: static; }
+    .sidebar-nav { display: flex; gap: 4px; overflow-x: auto; }
+    .overview-grid { grid-template-columns: 1fr; }
+    #search { width: 180px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>{{PROJECT_NAME}}<span>brain</span></h1>
+  <div id="header-right">
+    <div id="stats-bar">{{TOTAL_ENTRIES}} entries · updated {{LAST_UPDATED}}</div>
+    <input type="text" id="search" placeholder="Search entries...">
+  </div>
+</div>
+
+<div class="main">
+  <nav class="sidebar">
+    <ul class="sidebar-nav">
+      <li><a href="#overview" class="active">
+        <span class="nav-dot" style="background: #64748B"></span>Overview
+      </a></li>
+      <li><a href="#history">
+        <span class="nav-dot" style="background: #8B5CF6"></span>History
+        <span class="nav-count" data-count="history"></span>
+      </a></li>
+      <li><a href="#decisions">
+        <span class="nav-dot" style="background: #10B981"></span>Decisions
+        <span class="nav-count" data-count="decision"></span>
+      </a></li>
+      <li><a href="#features">
+        <span class="nav-dot" style="background: #3B82F6"></span>Features
+        <span class="nav-count" data-count="feature"></span>
+      </a></li>
+      <li><a href="#bugs">
+        <span class="nav-dot" style="background: #EF4444"></span>Bugs
+        <span class="nav-count" data-count="bug"></span>
+      </a></li>
+      <li><a href="#patterns">
+        <span class="nav-dot" style="background: #EC4899"></span>Patterns
+      </a></li>
+      <li><a href="#architecture">
+        <span class="nav-dot" style="background: #F59E0B"></span>Architecture
+      </a></li>
+    </ul>
+  </nav>
+
+  <div class="content" id="content">
+  </div>
+</div>
+
+<script>
+const BRAIN_DATA = {{BRAIN_JSON}};
+
+const TYPE_COLORS = {
+  feature: '#3B82F6',
+  decision: '#10B981',
+  bug: '#EF4444',
+  history: '#8B5CF6',
+  architecture: '#F59E0B',
+  pattern: '#EC4899',
+  index: '#64748B'
+};
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function renderOverview() {
+  const idx = BRAIN_DATA.index;
+  let html = '<div class="section" id="overview">';
+  html += '<div class="section-header"><span class="section-dot" style="background: #64748B"></span>';
+  html += '<span class="section-title">Overview</span></div>';
+
+  if (idx.description) {
+    html += `<div class="card"><div class="card-content">${escapeHtml(idx.description)}</div></div>`;
+  }
+
+  html += '<div class="overview-grid">';
+  if (idx.techStack) {
+    html += `<div class="overview-item"><div class="overview-label">Tech Stack</div><div class="overview-value">${escapeHtml(idx.techStack)}</div></div>`;
+  }
+  if (idx.team) {
+    html += `<div class="overview-item"><div class="overview-label">Team</div><div class="overview-value">${escapeHtml(idx.team)}</div></div>`;
+  }
+  html += '</div>';
+
+  if (idx.directories) {
+    html += `<div class="overview-item" style="margin-bottom:12px"><div class="overview-label">Key Directories</div><div class="overview-value">${escapeHtml(idx.directories)}</div></div>`;
+  }
+
+  html += '</div>';
+  return html;
+}
+
+function renderEntryCards(entries, type, title) {
+  const id = title.toLowerCase().replace(/\s+/g, '-');
+  const color = TYPE_COLORS[type] || '#64748B';
+
+  let html = `<div class="section" id="${id}">`;
+  html += `<div class="section-header"><span class="section-dot" style="background: ${color}"></span>`;
+  html += `<span class="section-title">${escapeHtml(title)}</span>`;
+  html += `<span class="section-count">${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}</span></div>`;
+
+  if (entries.length === 0) {
+    html += '<div class="empty-state">No entries yet.</div>';
+    html += '</div>';
+    return html;
+  }
+
+  entries.forEach(entry => {
+    html += `<div class="card timeline-dot" style="--dot-color: ${color}" data-searchable="${escapeHtml((entry.title + ' ' + (entry.content || '') + ' ' + (entry.context || '')).toLowerCase())}">`;
+    html += '<div class="card-top">';
+    html += `<span class="card-title">${escapeHtml(entry.title)}</span>`;
+    if (entry.date) {
+      html += `<span class="card-date">${escapeHtml(entry.date)}</span>`;
+    }
+    html += '</div>';
+
+    if (entry.content) {
+      html += `<div class="card-content">${escapeHtml(entry.content)}</div>`;
+    }
+
+    const tags = [];
+    if (entry.context) tags.push({ text: entry.context, cls: 'tag-context' });
+    if (entry.decision) tags.push({ text: entry.decision, cls: 'tag-decision' });
+    if (entry.status) tags.push({ text: entry.status, cls: 'tag-status' });
+    if (entry.symptom) tags.push({ text: 'Symptom: ' + entry.symptom, cls: 'tag-symptom' });
+    if (entry.rootCause) tags.push({ text: 'Root cause: ' + entry.rootCause, cls: 'tag-fix' });
+    if (entry.fix) tags.push({ text: 'Fix: ' + entry.fix, cls: 'tag-fix' });
+    if (entry.lesson) tags.push({ text: 'Lesson: ' + entry.lesson, cls: 'tag-lesson' });
+
+    if (tags.length > 0) {
+      html += '<div class="card-meta">';
+      tags.forEach(t => {
+        const displayText = t.text.length > 80 ? t.text.substring(0, 78) + '...' : t.text;
+        html += `<span class="card-tag ${t.cls}">${escapeHtml(displayText)}</span>`;
+      });
+      html += '</div>';
+    }
+
+    if (entry.links && entry.links.length > 0) {
+      html += '<div class="card-links">Linked: ';
+      html += entry.links.map(l => `<a href="#${l.replace(/[^a-z0-9]/gi, '-').toLowerCase()}">${escapeHtml(l)}</a>`).join(', ');
+      html += '</div>';
+    }
+
+    html += '</div>';
+  });
+
+  html += '</div>';
+  return html;
+}
+
+function renderPatterns() {
+  const patterns = BRAIN_DATA.patterns || [];
+  const color = TYPE_COLORS.pattern;
+
+  let html = '<div class="section" id="patterns">';
+  html += `<div class="section-header"><span class="section-dot" style="background: ${color}"></span>`;
+  html += '<span class="section-title">Patterns</span></div>';
+
+  if (patterns.length === 0) {
+    html += '<div class="empty-state">No patterns documented yet.</div></div>';
+    return html;
+  }
+
+  patterns.forEach(p => {
+    html += `<div class="card" data-searchable="${escapeHtml((p.title + ' ' + (p.content || '')).toLowerCase())}">`;
+    html += `<div class="card-top"><span class="card-title">${escapeHtml(p.title)}</span></div>`;
+    if (p.content) html += `<div class="card-content">${escapeHtml(p.content)}</div>`;
+    html += '</div>';
+  });
+
+  html += '</div>';
+  return html;
+}
+
+function renderArchitecture() {
+  const arch = BRAIN_DATA.architecture || {};
+  const color = TYPE_COLORS.architecture;
+
+  let html = '<div class="section" id="architecture">';
+  html += `<div class="section-header"><span class="section-dot" style="background: ${color}"></span>`;
+  html += '<span class="section-title">Architecture</span></div>';
+
+  if (arch.overview) {
+    html += `<div class="card" data-searchable="${escapeHtml(arch.overview.toLowerCase())}"><div class="card-top"><span class="card-title">Overview</span></div><div class="card-content">${escapeHtml(arch.overview)}</div></div>`;
+  }
+
+  if (arch.components && arch.components.length > 0) {
+    arch.components.forEach(c => {
+      html += `<div class="card" data-searchable="${escapeHtml((c.title + ' ' + (c.content || '')).toLowerCase())}">`;
+      html += `<div class="card-top"><span class="card-title">${escapeHtml(c.title)}</span></div>`;
+      if (c.content) html += `<div class="card-content">${escapeHtml(c.content)}</div>`;
+      html += '</div>';
+    });
+  }
+
+  if (arch.infrastructure) {
+    html += `<div class="card" data-searchable="${escapeHtml(arch.infrastructure.toLowerCase())}"><div class="card-top"><span class="card-title">Infrastructure</span></div><div class="card-content">${escapeHtml(arch.infrastructure)}</div></div>`;
+  }
+
+  html += '</div>';
+  return html;
+}
+
+// Render all sections
+const content = document.getElementById('content');
+let allHtml = '';
+allHtml += renderOverview();
+allHtml += renderEntryCards(BRAIN_DATA.history || [], 'history', 'History');
+allHtml += renderEntryCards(BRAIN_DATA.decisions || [], 'decision', 'Decisions');
+allHtml += renderEntryCards(BRAIN_DATA.features || [], 'feature', 'Features');
+allHtml += renderEntryCards(BRAIN_DATA.bugs || [], 'bug', 'Bugs');
+allHtml += renderPatterns();
+allHtml += renderArchitecture();
+content.innerHTML = allHtml;
+
+// Update sidebar counts
+document.querySelectorAll('[data-count]').forEach(el => {
+  const type = el.dataset.count;
+  const count = (BRAIN_DATA[type === 'decision' ? 'decisions' : type === 'bug' ? 'bugs' : type === 'feature' ? 'features' : type] || []).length;
+  el.textContent = count || '';
+});
+
+// Sidebar active state
+const navLinks = document.querySelectorAll('.sidebar-nav a');
+const sections = document.querySelectorAll('.section');
+
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      navLinks.forEach(l => l.classList.remove('active'));
+      const link = document.querySelector(`.sidebar-nav a[href="#${entry.target.id}"]`);
+      if (link) link.classList.add('active');
+    }
+  });
+}, { threshold: 0.3, rootMargin: '-80px 0px 0px 0px' });
+
+sections.forEach(s => observer.observe(s));
+
+// Smooth scroll
+navLinks.forEach(link => {
+  link.addEventListener('click', (e) => {
+    e.preventDefault();
+    const target = document.querySelector(link.getAttribute('href'));
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+});
+
+// Search
+document.getElementById('search').addEventListener('input', (e) => {
+  const query = e.target.value.toLowerCase().trim();
+  const cards = document.querySelectorAll('.card');
+
+  cards.forEach(card => {
+    const searchable = card.getAttribute('data-searchable') || '';
+    if (!query || searchable.includes(query)) {
+      card.classList.remove('hidden');
+    } else {
+      card.classList.add('hidden');
+    }
+  });
+});
+</script>
+</body>
+</html>

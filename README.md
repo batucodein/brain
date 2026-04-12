@@ -79,7 +79,7 @@ Restart your Claude Code session after installing.
 /brain update       Review session changes and update relevant pages
 /brain query "X"    Ask a question — searches across all pages, follows [[wikilinks]]
 /brain health       Check for stale pages, broken links, compaction needed
-/brain graph        Generate interactive D3.js graph visualization
+/brain dashboard    Generate interactive dashboard of all entries
 ```
 
 ### Quick Commands
@@ -150,17 +150,17 @@ git log --grep="^brain:"                    # only brain updates
 git log --invert-grep --grep="^brain:"      # only code changes
 ```
 
-## Graph Visualization
+## Dashboard
 
-`/brain graph` generates a standalone HTML file with an interactive D3.js force-directed graph. No server needed — just opens in your browser.
+`/brain dashboard` generates a standalone HTML dashboard showing all brain entries organized by category, sorted chronologically. No server needed — opens in your browser.
 
-- **Color-coded nodes** — Features (blue), Decisions (green), Bugs (red), History (purple), Architecture (amber), Patterns (pink)
-- **Hover** to see content preview and connections
-- **Search** to find specific entries and highlight their neighborhood
-- **Filter** by type to focus on decisions, bugs, or features
-- **Drag** nodes to rearrange, scroll to zoom
+- **Sidebar navigation** — Jump between Overview, History, Decisions, Features, Bugs, Patterns, Architecture
+- **Chronological ordering** — Every entry sorted by date within its category
+- **Search** — Filter all entries in real-time
+- **Date badges** — Every entry shows its `YYYY-MM-DD` date
+- **Context tags** — Decisions show context and status, bugs show symptom/root cause/fix
 
-The graph shows how brain entries connect through `[[wikilinks]]` — making the relationships between features, decisions, and bugs visible at a glance.
+Dark theme (background #0A0E27) with color-coded sections matching the brain type system.
 
 ## Platform Support
 

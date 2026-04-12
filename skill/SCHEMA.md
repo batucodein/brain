@@ -132,13 +132,16 @@ updated: 2026-04-11
 
 # History
 
-## 2026-04-10 — Added Redis caching layer
+## Added Redis caching layer
+**Date:** 2026-04-10
 Introduced Redis for session caching and rate limiting. Reduced p95 latency from 120ms to 45ms on authenticated endpoints.
 
-## 2026-04-01 — Migrated CI from CircleCI to GitHub Actions
+## Migrated CI from CircleCI to GitHub Actions
+**Date:** 2026-04-01
 Moved all pipelines. Build time dropped from 8min to 3min. Saved $200/mo.
 
-## 2026-03-15 — Initial release v1.0
+## Initial release v1.0
+**Date:** 2026-03-15
 Shipped core API with user auth, project CRUD, and webhook integrations.
 ```
 
@@ -336,6 +339,25 @@ These rules tell the LLM when and how to update `.brain/` pages.
 5. Keep entries concise — one paragraph per entry is ideal.
 6. Write for a developer who has never seen this repo. Explain the WHY, not just the WHAT.
 7. Use absolute dates (2026-04-11), never relative (yesterday, last week).
+
+### Date Format (CRITICAL)
+
+Every entry in `history.md`, `decisions.md`, `bugs.md`, and `features/*.md` timelines MUST have a `**Date:** YYYY-MM-DD` line immediately after the `## ` header. Full date required — never month-only (`2026-03`), never relative. This enables chronological sorting in the dashboard.
+
+**Correct:**
+```markdown
+## Chose Redis over Memcached
+**Date:** 2026-04-10
+Content here...
+```
+
+**Wrong:**
+```markdown
+## 2026-04-10 — Chose Redis over Memcached
+Content here...
+```
+
+The date goes in a `**Date:**` field, not in the header. Headers are for titles only.
 
 ### What NOT to Put in .brain/
 
