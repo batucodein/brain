@@ -90,16 +90,16 @@ For each page that needs updating:
 - For bugs, always include root cause and lesson.
 - Keep entries to 1-3 short paragraphs. Brain is context, not documentation.
 
-#### 6. Commit separately
+#### 6. Commit with your code
+
+Include brain updates in the same commit as the code changes they describe. Update brain pages before committing, then stage everything together:
 
 ```bash
-git add .brain/
-git commit -m "brain: <short summary>"
+git add .brain/ src/
+git commit -m "feat: add Google OAuth login"
 ```
 
-Never mix brain and code changes in the same commit. This gives teams clean separation:
-- `git log --grep="^brain:"` — only brain history
-- `git log --invert-grep --grep="^brain:"` — only code history
+One change = one commit. Brain pages are part of the change, not a separate event.
 
 ### Before Session End
 
@@ -113,7 +113,7 @@ If significant changes were made during the session, suggest updating brain. Be 
 4. **Use absolute dates.** Always `YYYY-MM-DD`. Never "yesterday" or "last week."
 5. **Don't duplicate README.** Reference it: "See README.md for setup instructions."
 6. **Respect existing content.** Preserve what others wrote. Add, don't replace (unless correcting errors).
-7. **Separate commits.** Always commit brain changes separately from code with prefix `brain:`.
+7. **Commit together.** Include brain updates in the same commit as the code they describe. Update brain pages before committing.
 8. **Compaction.** When any page exceeds 30 entries or 150 lines, move entries older than 3 months to `.brain/archive/<page>-<year>.md`.
 
 ---

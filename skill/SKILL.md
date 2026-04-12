@@ -342,7 +342,7 @@ Follow the update process defined in `.brain/SCHEMA.md` (section "Updating .brai
 3. Categorizing changes (feature, bug, decision, pattern, stack, architecture, refactor)
 4. Extracting the WHY from conversation (matching the 5 event types)
 5. Writing updates with proper format, dates, and `[[wikilinks]]`
-6. Committing separately with `brain:` prefix
+6. Including brain updates in the same commit as the code
 
 After completing the update, show what was changed:
 
@@ -354,7 +354,7 @@ Updated .brain/:
   - architecture.md: Updated auth section with OAuth provider flow
   - features/auth.md: Added timeline entry, linked to [[decisions.md#chose-google-oauth]]
 
-Committed: brain: record OAuth2 decision and update architecture
+Brain pages updated and ready to commit with your code changes.
 ```
 
 ---

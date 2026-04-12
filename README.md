@@ -161,19 +161,14 @@ Full story. Three developers. Nine months. Zero Slack archaeology.
 
 ## Git Conventions
 
-Brain updates are committed separately from code with a `brain:` prefix:
+Brain updates are included in the same commit as the code they describe:
 
 ```bash
-git add .brain/
-git commit -m "brain: record Redis caching decision"
+git add .brain/ src/
+git commit -m "feat: add Redis caching layer"
 ```
 
-This keeps PR diffs clean. Filter commits:
-
-```bash
-git log --grep="^brain:"                    # only brain updates
-git log --invert-grep --grep="^brain:"      # only code changes
-```
+One change = one commit. The LLM updates brain pages before committing, then stages everything together. No separate commits, no special prefixes.
 
 ## Dashboard
 
