@@ -295,40 +295,96 @@ Custom pages: api-versioning.md, deployment.md
 
 ## Command: update
 
-Review what happened in the current session and update relevant `.brain/` pages.
+Review what happened in the current session and update relevant `.brain/` pages. The goal is to capture the WHY behind changes — the reasoning, trade-offs, and context that git diff cannot show.
 
-### Step 1 — Detect what changed
+### Step 1 — Get the WHAT (code changes)
+
+Read the actual diff, not just file names:
 
 ```bash
-git diff --stat HEAD 2>/dev/null
+git diff HEAD --stat 2>/dev/null
 git diff --cached --stat 2>/dev/null
 ```
 
-Also review the conversation context: what did the user and LLM work on in this session?
+Then read the full diff content for changed files (excluding generated/lock files):
 
-### Step 2 — Determine which pages need updates
+```bash
+git diff HEAD -- ':(exclude)*.lock' ':(exclude)package-lock.json' ':(exclude)go.sum' 2>/dev/null | head -300
+git diff --cached -- ':(exclude)*.lock' ':(exclude)package-lock.json' ':(exclude)go.sum' 2>/dev/null | head -300
+```
 
-Apply the update rules from SCHEMA.md:
+Also check recent commits made during this session:
 
-- New significant feature added → `history.md`, `architecture.md`, create `features/X.md`
-- Architectural decision made during session → `decisions.md`, link from `features/X.md` if related
-- Bug fixed → `bugs.md`, `history.md`, update `features/X.md` if the bug relates to a tracked feature
-- New pattern established → `patterns.md`
-- Stack/dependency changed → `index.md`
-- Infrastructure changed → `architecture.md`
+```bash
+git log --since="2 hours ago" --oneline --stat 2>/dev/null
+```
 
-### Step 3 — Read each relevant page, update it
+### Step 2 — Significance filter
+
+Not every change is brain-worthy. Skip the update (tell the user "no significant changes to record") if ALL changes are:
+- Formatting, linting, or whitespace only
+- Dependency version bumps with no behavior change
+- Renaming with no design reasoning
+- Changes to fewer than 3 lines with no architectural impact
+
+Continue only if at least one change involves:
+- New feature or endpoint
+- Bug fix with a root cause
+- Architectural change (new dependency, new layer, new integration)
+- A decision the user explicitly reasoned about
+- A pattern the team established or changed
+- Infrastructure or deployment change
+
+### Step 3 — Categorize each significant change
+
+For each significant change from the diff, assign a category:
+
+| Category | Signals in diff | Brain page |
+|----------|----------------|------------|
+| **New feature** | New files in feature directories, new routes/endpoints, new service | `history.md`, `features/X.md`, maybe `architecture.md` |
+| **Bug fix** | Changes in existing logic, fix in commit message, error handling added | `bugs.md`, `features/X.md` if related |
+| **Decision** | New dependency in go.mod/package.json, switched library, new pattern introduced | `decisions.md`, `features/X.md` if related |
+| **Pattern change** | New error handling approach, naming convention shift, new test pattern | `patterns.md` |
+| **Stack change** | New entry in go.mod/package.json/requirements.txt, new Docker service | `index.md` |
+| **Architecture change** | New directory structure, new middleware, new external integration | `architecture.md` |
+| **Refactor** | Moved code between files, restructured layers, no behavior change | `history.md`, `architecture.md` if structure changed |
+
+### Step 4 — Extract the WHY from conversation (CRITICAL)
+
+This is what makes brain valuable. The diff tells you WHAT changed. The conversation tells you WHY. For each categorized change, look back through the conversation for these **event types**:
+
+1. **A choice was made** — There were multiple possible approaches and one was picked. The reasoning may be explicit or implied. If the user picked from options you proposed, the rejected options are "alternatives considered."
+
+2. **Something broke and was understood** — A problem was reported, investigation happened, a root cause was found. Capture the full arc: symptom → investigation → root cause → fix → lesson.
+
+3. **Something was rejected** — The user said no to a suggestion, or an approach was tried and didn't work. The rejected path and the reason it was rejected are often more valuable than the chosen path.
+
+4. **A constraint shaped the implementation** — Performance, cost, compatibility, timeline, team size, legal requirements — anything that made the solution different from the "obvious" approach.
+
+5. **The system changed structurally** — New component, new integration, new layer, removed dependency. The reasoning for structural changes is the hardest to recover later.
+
+**If no WHY exists in the conversation** for a change: Do NOT invent one. Either:
+- Ask the user: "I see you added Redis caching — what drove that decision?"
+- Or write the entry with just the WHAT and mark it: `**Context:** To be filled — reasoning not captured in session.`
+
+### Step 5 — Read current brain pages and write updates
 
 For each page that needs updating:
 1. Read the current content.
-2. Add/modify the relevant section following SCHEMA.md format rules.
-3. Update the `updated` date in frontmatter.
-4. Add `[[wikilinks]]` to connect related entries across pages. Every bug, decision, or history entry that relates to a feature must link to its feature page, and vice versa.
-5. Write the updated file.
+2. Add new entries at the top (newest first) for `history.md`, `decisions.md`, `bugs.md`.
+3. Replace in-place for `index.md`, `architecture.md`, `patterns.md`.
+4. Follow SCHEMA.md format strictly. Every entry needs `**Date:** YYYY-MM-DD`.
+5. Add `[[wikilinks]]` to connect related entries across pages. Every bug, decision, or history entry that relates to a tracked feature MUST link to `[[features/X.md]]`, and the feature page must link back.
+6. If a significant new feature was built and no `features/X.md` exists, create one.
+7. Write the updated files.
 
-### Step 4 — Commit brain changes separately
+**Writing rules for entries:**
+- Lead with the WHY, not the WHAT. Bad: "Added Redis caching." Good: "Added Redis caching to avoid redundant AI API calls — same product/market queries were hitting the API repeatedly, costing money and adding latency."
+- Include alternatives considered when available: `**Alternatives considered:** Memcached (simpler but no pub/sub), database caching (too slow for our p95 target).`
+- For bugs, always include the root cause and lesson: `**Lesson:** Never share mutable state between goroutines without synchronization.`
+- Keep entries to 1-3 short paragraphs. Brain is context, not documentation.
 
-Brain updates get their own commit, separate from code changes. This keeps PR diffs clean.
+### Step 6 — Commit brain changes separately
 
 ```bash
 git add .brain/
@@ -336,19 +392,21 @@ git commit -m "brain: <short summary of what changed>"
 ```
 
 Examples:
-- `brain: record Redis caching decision`
-- `brain: update architecture with OAuth flow`
-- `brain: add webhook race condition to bugs`
+- `brain: record Redis caching decision and trade-offs`
+- `brain: document OAuth bug root cause and fix`
+- `brain: add payment feature page with initial timeline`
 
-If there are also unstaged code changes, commit brain first, then the code. Never mix brain updates with code changes in the same commit.
+Never mix brain and code changes in the same commit.
 
-### Step 5 — Show what was updated
+### Step 7 — Show what was updated
 
 ```
 Updated .brain/:
-  - history.md: Added "Implemented OAuth2 flow with Google provider"
-  - decisions.md: Added "Chose Google OAuth over Auth0 — simpler for our scale"
-  - architecture.md: Updated auth section with OAuth flow
+  - decisions.md: Added "Chose Google OAuth over Auth0"
+    WHY captured: simpler integration for current scale, Auth0 pricing doesn't justify at <1k users
+  - history.md: Added "Implemented OAuth2 flow"
+  - architecture.md: Updated auth section with OAuth provider flow
+  - features/auth.md: Added timeline entry, linked to [[decisions.md#chose-google-oauth]]
 
 Committed: brain: record OAuth2 decision and update architecture
 ```
@@ -708,22 +766,26 @@ Remove brain's git hook.
 
 ## Session Behavior (Automatic)
 
-When `.brain/` exists in the current repo, the LLM should:
+When `.brain/` exists in the current repo, the LLM should actively track reasoning throughout the session — not just at update time.
 
 ### At Session Start
 1. Read `.brain/index.md` to understand the project.
 2. Based on the user's first task, read relevant pages (e.g., `architecture.md` for refactoring, `bugs.md` for debugging).
 3. If the task relates to a specific feature, check if `features/X.md` exists and read it for full context.
 
-### During Session
-1. When making architectural decisions, mention that you'll record it in `.brain/decisions.md`.
-2. When fixing non-trivial bugs, note the root cause for `.brain/bugs.md` and update the relevant `features/X.md`.
-3. When establishing new patterns, flag them for `.brain/patterns.md`.
-4. When building a significant new feature, create `features/X.md` to track its lifecycle from day one.
-5. Always add `[[wikilinks]]` when entries relate to each other across pages.
+### During Session — Track Reasoning
+The conversation is the only place where reasoning exists. Be aware of these moments as they happen:
+
+1. **A choice was made** — Multiple approaches existed, one was picked. Note what was chosen and what wasn't.
+2. **Something broke and was understood** — A bug was reported, investigated, and diagnosed. The full arc matters.
+3. **Something was rejected** — An approach was proposed and turned down. Why it was rejected is high-value context.
+4. **A constraint shaped the work** — Performance, cost, compatibility, time, team size — anything that steered the implementation away from the default approach.
+5. **The system changed structurally** — New component, integration, or dependency. Structural reasoning is the hardest to recover later.
+
+You don't need to write anything during the session — just recognize these moments so you can reference them at `/brain update` time.
 
 ### Before Session End (if significant changes were made)
-Suggest running `/brain update` to capture what happened.
+Suggest running `/brain update` to capture what happened. Be specific about what you'd record: "I'd capture the Redis caching decision and the webhook bug root cause — want me to run `/brain update`?"
 
 ---
 
