@@ -111,6 +111,22 @@ while [ $# -gt 0 ]; do
 done
 
 if [ "$MODE" = "hooks-only" ]; then
+    # --hooks-only preflight: require a prior full install.
+    # Reinstalling hooks without the skill present leaves a partial state
+    # where hooks exist but /brain commands fail (skill files missing).
+    if [ ! -f "$SKILL_DIR/SKILL.md" ]; then
+        echo "ERROR: --hooks-only requires a prior full install."
+        echo ""
+        echo "No skill detected at: $SKILL_DIR/SKILL.md"
+        echo ""
+        echo "Run the full installer first (without --hooks-only):"
+        echo "  curl -fsSL https://raw.githubusercontent.com/batucodein/brain/main/install.sh | bash"
+        echo "Or, from a cloned repo:"
+        echo "  ./install.sh"
+        echo ""
+        echo "Then --hooks-only can be used to refresh hooks if they get out of sync."
+        exit 1
+    fi
     echo "Reinstalling brain hooks only..."
 else
     echo "Installing brain..."
@@ -167,8 +183,23 @@ if [ "$MODE" != "hooks-only" ]; then
 When the user types `/brain`, invoke the Skill tool with `skill: "brain"` before doing anything else.
 When a repo has `.brain/` directory, read `.brain/index.md` for project context. When updating brain pages, read `.brain/SCHEMA.md` for format rules.'
 
-    if grep -q "# brain" "$CLAUDE_MD" 2>/dev/null; then
-        echo "brain entry already exists in $CLAUDE_MD"
+    if grep -q "^# brain$" "$CLAUDE_MD" 2>/dev/null; then
+        # Block marker exists. Verify the content matches the canonical block.
+        # Extract the existing brain block: from `# brain` header to the next `# ` top-level
+        # heading (or EOF). Compare against $BRAIN_BLOCK. If drift, warn with a diff — never
+        # auto-modify the user's file silently.
+        EXISTING=$(awk '/^# brain$/{flag=1} flag{print} /^# /{if(NR>1 && !/^# brain$/){flag=0}}' "$CLAUDE_MD" | awk '/^# [^b]/{exit} /^# brain$/{p=1} p{print}')
+        if [ "$EXISTING" = "$BRAIN_BLOCK" ]; then
+            echo "brain entry already exists in $CLAUDE_MD (content matches canonical)"
+        else
+            echo "WARNING: brain block in $CLAUDE_MD differs from canonical."
+            echo ""
+            echo "Not modifying your CLAUDE.md. To apply the canonical block,"
+            echo "delete the existing '# brain' section from $CLAUDE_MD and re-run this installer."
+            echo ""
+            echo "Diff (canonical - existing):"
+            diff <(echo "$BRAIN_BLOCK") <(echo "$EXISTING") || true
+        fi
     else
         echo "" >> "$CLAUDE_MD"
         echo "$BRAIN_BLOCK" >> "$CLAUDE_MD"
@@ -178,35 +209,49 @@ fi
 
 # Install Claude Code hooks in settings.json
 if [ -f "$SETTINGS" ]; then
-    # Check if hooks already exist
-    if grep -q "post-commit-brain" "$SETTINGS" 2>/dev/null; then
-        echo "brain hooks already in settings.json"
+    # Structural idempotency check via jq (replaces a grep substring match,
+    # which couldn't distinguish "already registered correctly" from
+    # "mentioned in a comment / partial / malformed entry").
+    HAS_POSTCOMMIT=$(jq --arg path "$HOOKS_DIR/post-commit-brain.sh" '
+      [.hooks.PostToolUse[]?.hooks[]?.command? // empty] | map(select(. == $path)) | length
+    ' "$SETTINGS" 2>/dev/null || echo 0)
+    HAS_SESSIONSTART=$(jq --arg path "$HOOKS_DIR/session-start-brain.sh" '
+      [.hooks.SessionStart[]?.hooks[]?.command? // empty] | map(select(. == $path)) | length
+    ' "$SETTINGS" 2>/dev/null || echo 0)
+
+    if [ "$HAS_POSTCOMMIT" -gt 0 ] && [ "$HAS_SESSIONSTART" -gt 0 ]; then
+        echo "brain hooks already registered in settings.json"
     else
-        echo "Adding brain hooks to settings.json..."
-        # Use a temp file to merge hooks into existing settings
+        echo "Adding brain hooks to settings.json (missing: post-commit=$HAS_POSTCOMMIT, session-start=$HAS_SESSIONSTART)..."
+        # Merge into existing settings. Only add the hook entries that are missing
+        # (jq adds them conditionally so re-runs never duplicate).
         TEMP=$(mktemp)
         jq --arg postcommit "$HOOKS_DIR/post-commit-brain.sh" \
            --arg sessionstart "$HOOKS_DIR/session-start-brain.sh" '
           .hooks //= {} |
           .hooks.PostToolUse //= [] |
-          .hooks.PostToolUse += [{
-            "matcher": "Bash",
-            "hooks": [{
-              "type": "command",
-              "if": "Bash(git commit*)",
-              "command": $postcommit,
-              "timeout": 30
-            }]
-          }] |
           .hooks.SessionStart //= [] |
-          .hooks.SessionStart += [{
-            "matcher": "",
-            "hooks": [{
-              "type": "command",
-              "command": $sessionstart,
-              "timeout": 10
-            }]
-          }]
+          (if ([.hooks.PostToolUse[]?.hooks[]?.command? // empty] | map(select(. == $postcommit)) | length) == 0
+           then .hooks.PostToolUse += [{
+             "matcher": "Bash",
+             "hooks": [{
+               "type": "command",
+               "if": "Bash(git commit*)",
+               "command": $postcommit,
+               "timeout": 30
+             }]
+           }]
+           else . end) |
+          (if ([.hooks.SessionStart[]?.hooks[]?.command? // empty] | map(select(. == $sessionstart)) | length) == 0
+           then .hooks.SessionStart += [{
+             "matcher": "",
+             "hooks": [{
+               "type": "command",
+               "command": $sessionstart,
+               "timeout": 10
+             }]
+           }]
+           else . end)
         ' "$SETTINGS" > "$TEMP" && mv "$TEMP" "$SETTINGS"
         echo "brain hooks added to settings.json"
     fi

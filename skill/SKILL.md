@@ -238,27 +238,47 @@ For each page, use the analysis from Step 2 to generate content. Follow the form
 
 ### Step 4 — Install platform integration
 
-Detect which platform files exist and create/append brain instructions.
+brain supports three platform instruction files:
+- `CLAUDE.md` (Claude Code)
+- `.cursor/rules` (Cursor)
+- `AGENTS.md` (Codex)
 
-**CLAUDE.md:**
+**Precedence rule:**
+- **Update every file that already exists.** If the user or their teammates have chosen a tool (and therefore created one of these files), /brain init updates that file with the brain section.
+- **Do NOT create files that don't exist.** Creating a `.cursor/rules` on a repo whose team doesn't use Cursor adds clutter and signals a tool choice the user didn't make.
+- **Exception:** if NONE of the three exist, create `CLAUDE.md` as the default (since this is a Claude Code skill).
+
+**Content marker for idempotent re-runs:** wrap the brain section with `<!-- brain:start -->` / `<!-- brain:end -->` comments so re-running /brain init replaces the section cleanly rather than appending.
+
+**Procedure:**
+
 ```bash
-if [ -f CLAUDE.md ]; then
-    echo "CLAUDE_MD_EXISTS"
-else
-    echo "NO_CLAUDE_MD"
+HAS_CLAUDE=$([ -f CLAUDE.md ] && echo 1 || echo 0)
+HAS_CURSOR=$([ -f .cursor/rules ] && echo 1 || echo 0)
+HAS_AGENTS=$([ -f AGENTS.md ] && echo 1 || echo 0)
+
+# If none exist, default to CLAUDE.md
+if [ "$HAS_CLAUDE$HAS_CURSOR$HAS_AGENTS" = "000" ]; then
+    HAS_CLAUDE=1
+    touch CLAUDE.md
 fi
 ```
 
-If exists: append the brain section (see Platform Integration in SCHEMA.md). If not: create it with the brain section.
+For each file that `HAS_*` is 1:
+1. Read the file.
+2. If it contains `<!-- brain:start -->` ... `<!-- brain:end -->`, REPLACE the block (between the markers) with the canonical content.
+3. Otherwise, APPEND the marker-wrapped block at the end of the file.
 
-**Cursor rules:**
-```bash
-mkdir -p .cursor
+**Canonical block content** (same for all three files — SCHEMA's Platform Integration section is the source):
+```markdown
+<!-- brain:start -->
+# Project Brain
+This repo has .brain/ project memory. Read .brain/index.md for project context.
+When updating brain pages, read .brain/SCHEMA.md for format rules and update instructions.
+<!-- brain:end -->
 ```
-Create `.cursor/rules` if it doesn't exist, or append brain instructions.
 
-**AGENTS.md:**
-Create `AGENTS.md` if it doesn't exist, or append brain instructions.
+**Rationale:** users often use multiple tools (Claude + Cursor together is common). Updating all that exist keeps instructions in sync. Never creating missing files respects the user's tool choice. The content markers make the operation idempotent.
 
 ### Step 5 — Offer auto-update hooks
 
@@ -691,6 +711,9 @@ Generate an interactive HTML dashboard showing all `.brain/` entries organized b
      "topics": [
        {"slug": "redis", "title": "Redis", "updated": "2026-04-16", "overview": "First paragraph of Overview...", "timelineCount": 7, "relatedCount": 3}
      ],
+     "customs": [
+       {"slug": "onboarding", "title": "Onboarding", "updated": "2026-04-16", "overview": "First paragraph of the custom page..."}
+     ],
      "patterns": [
        {"title": "Pattern name", "content": "How it works..."}
      ],
@@ -720,6 +743,13 @@ Generate an interactive HTML dashboard showing all `.brain/` entries organized b
    - `timelineCount` = count of bullets under `## Timeline`
    - `relatedCount` = count of wikilinks under `## Related` (features + topics combined)
    - Topics are rendered **one card per page** (not flattened into per-Timeline-entry cards). Each card is a link to the full topic page on disk.
+
+   **Parsing rules for customs (`custom/*.md`):**
+   - `slug` = filename without `.md` (e.g., `onboarding` from `custom/onboarding.md`)
+   - `title` = the `# ` heading text
+   - `updated` = frontmatter `updated:` value
+   - `overview` = first paragraph under the `# ` heading (custom pages don't have a fixed `## Overview` — take the first prose paragraph)
+   - Customs are rendered **one card per page**, like topics. Each card links to the custom page on disk.
 
    **Parsing rules for index.md:**
    - Description = first paragraph after `# Title`
