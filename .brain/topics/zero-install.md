@@ -11,15 +11,17 @@ The foundational design principle that makes brain work across any LLM tool: a r
 
 ## Timeline
 
-- **2026-04-11** — Initial release establishes the zero-install model as the core constraint. See [[decisions.md#zero-install-model-as-the-foundation]].
-- **2026-04-12** — Three-tier architecture formalizes zero-install as Tier 1, with skill + hooks as optional Tier 2 and Tier 3. See [[decisions.md#adopted-three-tier-architecture]].
+- **2026-04-18** — Shipped prompting pass — sharpened LLM judgment via context + examples + confidence gates, instead of formalizing more rules (which would have crossed into dumbing). See [[decisions.md#sharpen-judgment-via-prompting-dont-formalize-it]].
 - **2026-04-18** — Accepted "LLM-as-enforcer drift" as a design trade-off. Strict mechanical enforcement would break zero-install (would require every LLM tool to agree on a linter). Documented in ARCHITECTURE.md §8.2.
+- **2026-04-12** — Three-tier architecture formalizes zero-install as Tier 1, with skill + hooks as optional Tier 2 and Tier 3. See [[decisions.md#adopted-three-tier-architecture]].
+- **2026-04-11** — Initial release establishes the zero-install model as the core constraint. See [[decisions.md#zero-install-model-as-the-foundation]].
 
 ## Key Decisions
 
 - [[decisions.md#zero-install-model-as-the-foundation]]
 - [[decisions.md#adopted-three-tier-architecture]]
 - [[decisions.md#reasoning-based-doctor-not-a-script]]
+- [[decisions.md#sharpen-judgment-via-prompting-dont-formalize-it]]
 
 ## Related
 

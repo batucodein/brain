@@ -5,6 +5,14 @@ updated: 2026-04-18
 
 # Decisions
 
+## Sharpen judgment via prompting, don't formalize it
+**Date:** 2026-04-18
+**Context:** After shipping the deterministic layer (slug algorithm, hook skip conditions, doctor invariants, idempotent install, etc.), the next natural step looked like "find more places to make deterministic." But continuing to formalize would cross into dumbing — replacing LLM judgment where judgment is the whole value (event categorization, WHY extraction, topic scope matching, Timeline caption writing).
+**Decision:** Stop pushing deterministic rules. Instead invest in **prompting** — better context at decision points (conditional reads), reasoning examples (not verdicts to match), explicit partial-WHY option, confidence-gated prompts that merge instead of double-prompting. All additive to SCHEMA.md and SKILL.md; zero session-start cost change.
+**Alternatives considered:** Keep mining for deterministic wins (rejected — remaining candidates all crossed into judgment territory); add a strict-mode pre-commit linter (rejected — breaks the zero-install tier).
+**Rule that falls out:** judgment goes in the LLM, rules go in the substrate, examples teach reasoning. Test: "could a bash/jq/regex script produce the right answer from structural inputs alone?" → yes → rule. No → LLM. See [[features/doctor.md]] (deterministic substrate) and [[topics/zero-install.md]] (the constraint that forces this split).
+**Status:** Active
+
 ## Adopted three-tier architecture
 **Date:** 2026-04-12
 **Context:** Needed to support users who range from "just clone a repo and read .brain/" all the way to "full auto-maintained brain." A single install mode would either over-install for casual users or under-deliver for power users.
