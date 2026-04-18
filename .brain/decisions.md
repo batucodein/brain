@@ -5,6 +5,17 @@ updated: 2026-04-18
 
 # Decisions
 
+## Organic-archive-discovery via SCHEMA guidance, not session-start listing
+**Date:** 2026-04-18
+**Context:** Archive-discovery guidance existed for 3 paths (`/brain query` ranking, wikilink resolution fallback, doctor invariant) but was absent for ORGANIC conversation — a user asking "what was the X thing years ago?" without typing `/brain query` had no trigger to make the LLM check archive. Gap surfaced during architecture walkthrough.
+**Decision:** Add one bullet to SCHEMA § At Session Start telling the LLM to check `.brain/archive/*.md` when the user's question touches events older than active pages' date range. ~50 tokens in SCHEMA, paid per `/brain update` only — session-start hook unchanged.
+**Alternatives considered:**
+- A: accept the gap, document "use `/brain query` for old events" — rejected, user may not know to switch to the command
+- B: list archive filenames in session-start hook — rejected, ~20-50 tokens per session is a permanent tax for a rare case
+- D: strengthen the "> Older entries archived in..." pointer line in each active page — rejected, only works if LLM reads that specific page
+**Constraint that shaped the choice:** session-start token budget is every-session; SCHEMA growth is per-update. C is cheaper over time for the same outcome.
+**Status:** Active. Refinement of [[decisions.md#sharpen-judgment-via-prompting-dont-formalize-it]] — another case of "add judgment guidance, don't add a rule."
+
 ## Sharpen judgment via prompting, don't formalize it
 **Date:** 2026-04-18
 **Context:** After shipping the deterministic layer (slug algorithm, hook skip conditions, doctor invariants, idempotent install, etc.), the next natural step looked like "find more places to make deterministic." But continuing to formalize would cross into dumbing — replacing LLM judgment where judgment is the whole value (event categorization, WHY extraction, topic scope matching, Timeline caption writing).

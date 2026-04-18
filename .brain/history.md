@@ -5,6 +5,10 @@ updated: 2026-04-18
 
 # History
 
+## Closed organic-archive-discovery gap via SCHEMA guidance
+**Date:** 2026-04-18
+Added one bullet to SCHEMA § At Session Start telling the LLM to check `.brain/archive/*.md` when a question touches events older than active pages' date range. Closes the gap where organic conversation (no `/brain query`) wasn't guided to archive. Picked SCHEMA-side (per-update cost) over session-start listing (per-session cost) — better trade for a rare use case. See [[decisions.md#organic-archive-discovery-via-schema-guidance-not-session-start-listing]].
+
 ## Prompting pass — sharpened LLM judgment without formalizing it
 **Date:** 2026-04-18
 Added 9 prompting changes across SCHEMA.md and SKILL.md (~1150 combined token growth, ~5% each). Closes issue #3 (session-compaction WHY loss) via proactive-flush guidance. SCHEMA now has: confidence-gated categorization in Step 3 with reasoning examples (ORM swap = decision; middleware scope change = architecture), partial-WHY marker `[partial — ...]` as an explicit option alongside ask/placeholder, conditional richer reads on topic-scope matching (only read recent Timeline if Overview is abstract), wikilink target disambiguation (prefer newest anchor on multi-match), stricter topic-creation threshold (across multiple sessions), Timeline caption quality guidance ("name the lever that moved"). SKILL.md /brain decide/bug/history now run both duplicate and category-mismatch checks, merged into ONE y/N prompt instead of two. See [[decisions.md#sharpen-judgment-via-prompting-dont-formalize-it]].
