@@ -21,8 +21,10 @@ Per-repo project memory tracked in git. Every developer who clones the repo gets
 /brain bug "<text>"       # Record a notable bug fix
 /brain history "<text>"   # Add a history entry
 /brain query "<question>" # Ask a question — search pages, follow links, synthesize answer
-/brain health             # Check brain health: stale pages, broken links, gaps
+/brain topic <name>       # Create or sync a topic page (cross-cutting narrative synthesis)
 /brain dashboard          # Generate interactive dashboard of all .brain/ entries
+/brain doctor             # Full diagnostic: integrity, format, content quality, staleness
+/brain uninstall          # Remove brain skill, hooks, and config from this machine
 ```
 
 ## What You Must Do When Invoked
@@ -179,12 +181,27 @@ Read these files to understand what external services the app talks to.
 Create the `.brain/` directory and all core pages.
 
 ```bash
-mkdir -p .brain/custom .brain/features .brain/archive
+mkdir -p .brain/custom .brain/features .brain/topics .brain/archive
 ```
+
+(The `topics/` directory starts empty — topics are user-created via `/brain topic <name>`.)
 
 **Copy SCHEMA.md into the repo** so it ships with git:
 ```bash
+# Verify source exists before copying
+if [ ! -f ~/.claude/skills/brain/SCHEMA.md ]; then
+    echo "ERROR: brain skill not installed at ~/.claude/skills/brain/SCHEMA.md"
+    echo "Install first: curl -fsSL https://raw.githubusercontent.com/batucodein/brain/main/install.sh | bash"
+    exit 1
+fi
+
 cp ~/.claude/skills/brain/SCHEMA.md .brain/SCHEMA.md
+
+# Verify copy succeeded
+if [ ! -f .brain/SCHEMA.md ]; then
+    echo "ERROR: Failed to copy SCHEMA.md to .brain/"
+    exit 1
+fi
 ```
 
 For each page, use the analysis from Step 2 to generate content. Follow the format defined in `.brain/SCHEMA.md`.
@@ -215,7 +232,9 @@ For each page, use the analysis from Step 2 to generate content. Follow the form
   - Key files: list the actual source files
   - `[[wikilinks]]` to related entries in decisions.md, bugs.md, history.md
 
-**After generating pages, tell the user what was created and offer to review each page.**
+- **topics/*.md** (DO NOT CREATE DURING INIT): Topic pages are cross-cutting narrative syntheses (e.g., `topics/redis.md`, `topics/auth.md`). They emerge from explicit user intent via `/brain topic <name>`, not from repo analysis. Init sets up event-type pages + features; topics are a synthesis layer the user adds when a specific domain has proven it deserves one. Do not auto-create topic pages at init time — a topic created by init that never gets reviewed becomes stale noise.
+
+**After generating pages, tell the user what was created and offer to review each page. Note that `.brain/topics/` was NOT populated — suggest the user run `/brain topic <name>` when a domain feels ready for synthesis (e.g., after 3+ related entries accumulate in `decisions.md` / `bugs.md`).**
 
 ### Step 4 — Install platform integration
 
@@ -272,12 +291,23 @@ Run this to install hooks:
 
 **If no:** Skip. Brain still works — CLAUDE.md in the repo tells the LLM to read SCHEMA.md.
 
-### Step 6 — Summary
+### Step 6 — Commit brain initialization
+
+Auto-commit the brain files:
+
+```bash
+git add .brain/ CLAUDE.md
+git add .cursor/rules 2>/dev/null
+git add AGENTS.md 2>/dev/null
+git commit -m "brain: initialize project memory"
+```
+
+### Step 7 — Summary
 
 Print a summary:
 
 ```
-.brain/ initialized with N pages:
+.brain/ initialized and committed with N pages:
   - index.md (project overview)
   - architecture.md (system structure)
   - decisions.md (N decisions extracted)
@@ -291,7 +321,9 @@ Platform integration:
   - .cursor/rules ✓
   - AGENTS.md ✓
 
-Next: Review the generated pages with `/brain status`, then commit .brain/ to git.
+Committed: "brain: initialize project memory"
+
+Next: Review the generated pages with `/brain status`.
 ```
 
 ---
@@ -344,7 +376,8 @@ Follow the update process defined in `.brain/SCHEMA.md` (section "Updating .brai
 3. Categorizing changes (feature, bug, decision, pattern, stack, architecture, refactor)
 4. Extracting the WHY from conversation (matching the 5 event types)
 5. Writing updates with proper format, dates, and `[[wikilinks]]`
-6. Including brain updates in the same commit as the code
+6. Maintaining topic page Timelines (append wikilinks to matching `topics/*.md`; never create topics here)
+7. Including brain updates in the same commit as the code
 
 After completing the update, show what was changed:
 
@@ -355,6 +388,7 @@ Updated .brain/:
   - history.md: Added "Implemented OAuth2 flow"
   - architecture.md: Updated auth section with OAuth provider flow
   - features/auth.md: Added timeline entry, linked to [[decisions.md#chose-google-oauth]]
+  - topics/auth.md: Appended Timeline entry linking to decisions.md#chose-google-oauth
 
 Brain pages updated and ready to commit with your code changes.
 ```
@@ -420,6 +454,73 @@ Shortcut to add a history entry.
 
 ---
 
+## Command: topic
+
+Create or sync a topic page — a cross-cutting narrative synthesizing events from `decisions.md`, `bugs.md`, `history.md`, and `features/*.md` about a single domain (subsystem, concept, recurring concern).
+
+Topic creation is **explicit, user-initiated only**. The LLM never auto-creates topic pages during `/brain update` or `/brain init` — this prevents weak, sticky topics. `/brain update` does maintain existing topics automatically.
+
+### Usage
+```
+/brain topic <name>            # Create topics/<slug>.md from template if missing
+/brain topic <name> --sync     # Scan event pages for entries matching <name>;
+                                 propose Timeline wikilinks for confirmation
+```
+
+### Steps
+
+1. **Slugify the name.** Lowercase, spaces→hyphens, strip punctuation. E.g. `Redis Caching` → `redis-caching`. Call this `<slug>`.
+
+2. **Check existence.**
+   ```bash
+   test -f .brain/topics/<slug>.md && echo EXISTS || echo MISSING
+   ```
+
+3. **If MISSING (no `--sync` needed):**
+   - Read the template at `~/.claude/skills/brain/templates/topic.md`. If the template is missing, tell the user the skill install is incomplete and suggest `~/.claude/skills/brain/install.sh` to restore it. Stop.
+   - Substitute `{{TOPIC_NAME}}` with the user's original casing of `<name>` (e.g. "Redis Caching", not "redis-caching").
+   - Substitute `{{DATE}}` with today's date in `YYYY-MM-DD`.
+   - Create the `.brain/topics/` directory if it doesn't exist (`mkdir -p`).
+   - Write `.brain/topics/<slug>.md`.
+   - Tell the user:
+     ```
+     Created .brain/topics/<slug>.md. Fill in the Overview and Current Status
+     sections with your understanding of this topic. Run
+     `/brain topic <slug> --sync` to backfill the Timeline from existing
+     decisions/bugs/history/features entries.
+     ```
+   - Stop. Do NOT proceed to sync unless `--sync` was on the original command.
+
+4. **If EXISTS and `--sync` is passed (or file was just created AND `--sync` was passed):**
+   - Search event pages for keyword matches:
+     ```bash
+     grep -niE '(<name>|<slug>)' .brain/decisions.md .brain/bugs.md .brain/history.md .brain/features/*.md 2>/dev/null
+     ```
+     If the user's `<name>` has obvious synonyms (e.g. "redis" → "cache", "caching", "session store"), also grep for those. When in doubt, ask the user which synonyms to include.
+   - For each match, identify the enclosing `## ` header (the entry) and its `**Date:**` line. Compute the anchor slug using SCHEMA.md's rule (lowercase, spaces→hyphens, strip punctuation).
+   - Propose Timeline entries in the format:
+     ```
+     - **YYYY-MM-DD** — <short caption from the entry's header or first line> [[<page>.md#<anchor>]]
+     ```
+     Show the user the full list of proposed additions and ask for confirmation:
+     ```
+     Found N entries that match "<name>". Propose adding to topics/<slug>.md Timeline:
+
+       - **2026-04-10** — Chose Redis over Memcached [[decisions.md#chose-redis-over-memcached]]
+       - **2026-03-22** — Fixed connection pool exhaustion [[bugs.md#redis-connection-pool-exhaustion]]
+       ...
+
+     Add all? (y / select / skip)
+     ```
+   - On confirmation, read `.brain/topics/<slug>.md`, locate the `## Timeline` section, append the proposed bullets, then sort all Timeline bullets by `**Date:** YYYY-MM-DD` descending (newest first).
+   - Update the topic's `updated:` frontmatter to today's date.
+   - Write the file.
+   - Confirm to user: `Synced N entries into topics/<slug>.md Timeline.`
+
+5. **Never auto-create topic pages from any other command.** If `/brain update` detects a recurring theme that might deserve a topic, it SUGGESTS the user run `/brain topic <domain>` — it does not create the file itself.
+
+---
+
 ## Command: query
 
 Search across all `.brain/` pages, follow `[[wikilinks]]`, and synthesize an answer.
@@ -445,23 +546,25 @@ grep -ril "<keyword>" .brain/
 ```
 
 3. **Rank results.** Prioritize:
-   - `features/*.md` pages (highest — these are the lifecycle hubs)
+   - `topics/*.md` AND `features/*.md` pages (highest — topics are cross-cutting narrative hubs, features are lifecycle hubs; both answer "what's the story of X?" more completely than event-type pages alone)
    - Direct keyword matches in headers (`## ` lines)
    - Pages with more matches
+   - Archive pages (`archive/*.md`) matter when the question is about past history; include them in the ranked list rather than excluding
 
-4. **Read matched pages.** Read the top 3-5 most relevant pages fully.
+4. **Read matched pages.** Read the top 3-5 most relevant pages fully. If a topic page is in the matched set, read its full Timeline and follow its wikilinks — topic pages are the intended entry point for cross-year narratives.
 
 5. **Follow wikilinks.** For every `[[page.md#anchor]]` found in the matched pages:
    - Read the linked page/section
    - Collect the connected context
    - Follow one level deep only (don't recurse infinitely)
+   - If a wikilink points at a compacted entry (target not in active page), check the corresponding `archive/*.md` for the same anchor slug
 
 6. **Synthesize.** Combine all gathered context into a clear, chronological answer:
-   - Start with what it is (from feature page or index)
-   - Walk through the timeline (from history entries and feature timeline)
-   - Include decisions and their reasoning (from decisions.md)
-   - Include bugs and fixes if relevant (from bugs.md)
-   - Cite sources: "According to `.brain/decisions.md`..."
+   - Start with what it is (from topic page, feature page, or index)
+   - Walk through the timeline (from topic Timeline, feature timeline, or history entries)
+   - Include decisions and their reasoning (from decisions.md or archive)
+   - Include bugs and fixes if relevant (from bugs.md or archive)
+   - Cite sources: "According to `.brain/topics/redis.md` and `.brain/decisions.md`..."
 
 7. **Output format:**
 
@@ -481,72 +584,6 @@ Webhook delivery is an async event delivery system using a Redis queue
 Working. Handles ~2k deliveries/min with dead letter queue for failures.
 
 Sources: features/webhook-delivery.md, decisions.md, bugs.md
-```
-
----
-
-## Command: health
-
-Audit `.brain/` for quality issues.
-
-### Usage
-```
-/brain health
-```
-
-### Steps
-
-1. **Check existence.** If no `.brain/`, tell user to run `/brain init`.
-
-2. **Read all pages.** Read every `.brain/**/*.md` file. Parse frontmatter for `updated` dates.
-
-3. **Run checks:**
-
-**Staleness** — Flag pages not updated in 30+ days:
-```
-Check: (today's date) - (page updated date) > 30 days
-```
-
-**Broken wikilinks** — Find all `[[...]]` references and verify targets exist:
-```bash
-grep -roh '\[\[[^]]*\]\]' .brain/ | sort -u
-```
-For each link:
-- `[[page.md]]` → check file exists
-- `[[page.md#anchor]]` → check file exists AND section header exists
-
-**Missing feature pages** — Scan major code directories. For each significant feature area (3+ files in a directory, or a directory name that suggests a feature), check if a corresponding `features/*.md` exists.
-
-**Compaction needed** — Check if any page exceeds 30 entries or 150 lines:
-```bash
-wc -l .brain/*.md
-grep -c "^## " .brain/history.md .brain/decisions.md .brain/bugs.md
-```
-
-**Orphan entries** — Find entries in history.md, decisions.md, or bugs.md that relate to a feature but don't have a `[[wikilink]]` to a feature page.
-
-**Empty pages** — Flag pages that only have frontmatter and a header but no real content.
-
-4. **Output format:**
-
-```
-.brain/ health check for: ProjectName
-
-Score: 7/10
-
-Issues found:
-  [STALE] patterns.md — last updated 45 days ago
-  [BROKEN LINK] features/webhook.md references [[decisions.md#redis-queue]]
-      but no section "redis-queue" found in decisions.md
-  [MISSING FEATURE] src/payments/ has 8 files but no features/payments.md
-  [COMPACTION] history.md has 35 entries (threshold: 30) — consider archiving
-  [ORPHAN] decisions.md "Chose Redis for caching" has no [[wikilink]] to a feature page
-
-Suggestions:
-  - Run /brain update to refresh stale pages
-  - Create features/payments.md for the payments module
-  - Add [[wikilinks]] to connect orphan entries
-  - Run compaction on history.md (move pre-2026 entries to archive/)
 ```
 
 ---
@@ -589,6 +626,9 @@ Generate an interactive HTML dashboard showing all `.brain/` entries organized b
      "bugs": [
        {"title": "Bug title", "date": "2026-05-18", "content": "Description...", "symptom": "What happened...", "rootCause": "Why...", "fix": "How fixed...", "lesson": "Takeaway..."}
      ],
+     "topics": [
+       {"slug": "redis", "title": "Redis", "updated": "2026-04-16", "overview": "First paragraph of Overview...", "timelineCount": 7, "relatedCount": 3}
+     ],
      "patterns": [
        {"title": "Pattern name", "content": "How it works..."}
      ],
@@ -610,6 +650,15 @@ Generate an interactive HTML dashboard showing all `.brain/` entries organized b
    - For features: extract `## Timeline` entries and `## Key Files`
    - Sort all entries by date, newest first
 
+   **Parsing rules for topics (`topics/*.md`):**
+   - `slug` = filename without `.md` (e.g., `redis` from `topics/redis.md`)
+   - `title` = the `# ` heading text
+   - `updated` = frontmatter `updated:` value
+   - `overview` = first paragraph under `## Overview`
+   - `timelineCount` = count of bullets under `## Timeline`
+   - `relatedCount` = count of wikilinks under `## Related` (features + topics combined)
+   - Topics are rendered **one card per page** (not flattened into per-Timeline-entry cards). Each card is a link to the full topic page on disk.
+
    **Parsing rules for index.md:**
    - Description = first paragraph after `# Title`
    - Tech Stack = content under `## Tech Stack` (join bullet points)
@@ -625,12 +674,17 @@ Generate an interactive HTML dashboard showing all `.brain/` entries organized b
    - Components = each `### ` subsection under `## Components`
    - Infrastructure = content under `## Infrastructure`
 
-4. **Read the dashboard template.** Read `~/.claude/skills/brain/templates/dashboard.html`.
+4. **Read the dashboard template.** Read `~/.claude/skills/brain/templates/dashboard.html`. If the file is not found, stop and tell the user:
+   ```
+   ERROR: Dashboard template missing at ~/.claude/skills/brain/templates/dashboard.html
+   Reinstall brain: curl -fsSL https://raw.githubusercontent.com/batucodein/brain/main/install.sh | bash
+   ```
+   Do NOT generate HTML from scratch — the template is required.
 
 5. **Replace placeholders:**
    - `{{PROJECT_NAME}}` → project name from `.brain/index.md` title
-   - `{{BRAIN_JSON}}` → the JSON data object
-   - `{{TOTAL_ENTRIES}}` → count of history + decisions + features + bugs entries
+   - `{{BRAIN_JSON}}` → the JSON data object (including `topics` if any exist)
+   - `{{TOTAL_ENTRIES}}` → count of history + decisions + features + bugs + topics entries
    - `{{LAST_UPDATED}}` → most recent `updated` date from any page frontmatter
 
 6. **Write to `.brain/dashboard.html`.**
@@ -652,9 +706,191 @@ Generate an interactive HTML dashboard showing all `.brain/` entries organized b
      History: 4 entries
      Decisions: 5 entries
      Features: 0 entries
+     Topics: 3 pages
      Bugs: 0 entries
      Patterns: 7
      Architecture: 4 components
 
    Opened in browser.
    ```
+
+---
+
+## Command: doctor
+
+Diagnose `.brain/` and, with explicit user consent, apply a tightly-whitelisted
+set of mechanical fixes. Everything else is reported for the user to resolve.
+
+Doctor is a reasoning task, not a script. It reads two knowledge documents at
+runtime and decides what to check and what to suggest:
+
+1. **`.brain/SCHEMA.md`** — the authoritative format rules for this repo.
+   What pages must exist, frontmatter fields, date format, wikilink syntax,
+   page types, compaction, merge guidance. If it's not in SCHEMA, it's not
+   a rule doctor can enforce.
+2. **`~/.claude/skills/brain/DIAGNOSTICS.md`** — the playbook. Phase 0
+   environment probe, the invariants to check (citing SCHEMA sections), the
+   failure-mode → recovery table, and the auto-fix whitelist. Loaded only
+   when doctor runs, so session-start token budget is unaffected.
+
+If `DIAGNOSTICS.md` is missing from the skill install, tell the user the skill
+is incomplete and suggest `~/.claude/skills/brain/install.sh` to restore it.
+Do NOT attempt to diagnose without it — guessing rules is worse than reporting
+the gap.
+
+### Usage
+```
+/brain doctor             # Diagnose, then prompt before applying auto-fixes
+/brain doctor --dry-run   # Diagnose only — never prompt, never apply fixes
+```
+
+### How to run it
+
+1. **Read `.brain/SCHEMA.md`.** This is what "correct" means for this repo.
+2. **Read `~/.claude/skills/brain/DIAGNOSTICS.md`.** This tells you what to
+   check and how to reason about failures.
+3. **Probe the environment** using DIAGNOSTICS § Phase 0. Store each signal
+   on a `ctx` object — every recovery recommendation below consults `ctx`
+   because the same symptom needs different commands depending on whether
+   the tree is dirty, HEAD is broken, `.brain/` is gitignored, etc.
+4. **Walk the invariants** listed in DIAGNOSTICS (structural, content, git,
+   installation). Read each `.brain/*.md` and `.brain/features/*.md` **once**
+   and extract everything needed (frontmatter, headers, dates, wikilinks,
+   conflict markers, body length) in a single pass.
+5. **Build findings.** For each violation:
+   `{section, file, location, schema_ref, message, recovery, auto_fix_eligible}`.
+   Every finding cites the SCHEMA section it violates — this grounds the fix
+   and teaches the user.
+6. **Render the report** grouped by section (CONTEXT, SYSTEM, FORMAT & CONTENT,
+   SYNC, GAPS, SUMMARY). Empty sections stay silent.
+7. **Offer auto-fixes** — only the items DIAGNOSTICS lists in its auto-fix
+   whitelist. One top-level `[y/n]` prompt covers all of them; no per-item
+   ceremony. Skip the prompt entirely if `--dry-run` or if nothing is
+   whitelist-eligible.
+8. **Verify each applied fix** by re-running its specific invariant (the
+   `Verify` command DIAGNOSTICS specifies for that fix). If verify fails,
+   print a diagnosis block (command, exit code, stderr, what verify expected
+   vs found) and defer. **Do not loop, do not retry, do not fall back.**
+
+### Non-negotiable principles
+
+1. **Detection is side-effect-free.** Steps 1–6 never mutate anything.
+2. **Auto-fixes are exactly what DIAGNOSTICS whitelists** — no more.
+   As of DIAGNOSTICS v1.0: restore missing `.brain/SCHEMA.md` from the local
+   skill, and re-register hooks via `install.sh --hooks-only`. Nothing else.
+3. **Never auto-edit brain content.** Dates, wikilinks, prose, frontmatter
+   values the user wrote — these are the project's record of meaning and
+   stay in the user's hands.
+4. **Never auto-run `git checkout`**, even narrow ones. Print the command;
+   let the user run it. A dirty file checkout destroys uncommitted work.
+5. **Never run broad `git checkout HEAD -- .brain/`.** Always per-file.
+6. **Never run stash/pop sequences automatically.** Print them; the user runs them.
+7. **Never touch files with conflict markers during a merge.** Let git's
+   normal flow (`--ours` / `--theirs` / manual) handle it.
+8. **Bias toward detection + explanation over execution.** Doctor's value
+   is knowing what's wrong, not doing everything for the user.
+
+---
+
+## Command: uninstall
+
+Remove all brain components from the local machine. Does NOT touch `.brain/` directories inside repos — those stay in git.
+
+### Usage
+```
+/brain uninstall
+```
+
+### Step 1 — Confirm with the user
+
+```
+This will remove brain from your machine:
+  - Skill files (~/.claude/skills/brain/)
+  - Hook scripts (~/.claude/hooks/*-brain.sh)
+  - Hook config from ~/.claude/settings.json
+  - Brain section from ~/.claude/CLAUDE.md
+
+This will NOT remove .brain/ from any repo — your project memory stays in git.
+
+Proceed? (y/n)
+```
+
+Wait for confirmation. If no, stop.
+
+### Step 2 — Remove hook scripts
+
+```bash
+rm -f ~/.claude/hooks/post-commit-brain.sh
+rm -f ~/.claude/hooks/session-start-brain.sh
+```
+
+### Step 3 — Remove brain hooks from settings.json
+
+Remove only brain-related hook entries, keep everything else:
+
+```bash
+if [ -f ~/.claude/settings.json ]; then
+  jq '
+    # Remove brain entries from PostToolUse
+    if .hooks.PostToolUse then
+      .hooks.PostToolUse = [.hooks.PostToolUse[] | select(.hooks[0].command | test("brain") | not)]
+    else . end |
+    # Remove empty PostToolUse array
+    if .hooks.PostToolUse == [] then del(.hooks.PostToolUse) else . end |
+    # Remove brain entries from SessionStart
+    if .hooks.SessionStart then
+      .hooks.SessionStart = [.hooks.SessionStart[] | select(.hooks[0].command | test("brain") | not)]
+    else . end |
+    # Remove empty SessionStart array
+    if .hooks.SessionStart == [] then del(.hooks.SessionStart) else . end |
+    # Remove empty hooks object
+    if .hooks == {} then del(.hooks) else . end
+  ' ~/.claude/settings.json > ~/.claude/settings.json.tmp && mv ~/.claude/settings.json.tmp ~/.claude/settings.json
+fi
+```
+
+### Step 4 — Remove brain section from CLAUDE.md
+
+Remove only the brain block, keep everything else:
+
+```bash
+if [ -f ~/.claude/CLAUDE.md ]; then
+  # Remove the block from "# brain" to the next "# " heading or end of file
+  awk '
+    /^# brain$/ { skip=1; next }
+    /^# / && skip { skip=0 }
+    !skip { print }
+  ' ~/.claude/CLAUDE.md > ~/.claude/CLAUDE.md.tmp && mv ~/.claude/CLAUDE.md.tmp ~/.claude/CLAUDE.md
+fi
+```
+
+Verify CLAUDE.md is not empty after removal. If it only had the brain block:
+```bash
+if [ ! -s ~/.claude/CLAUDE.md ]; then
+  rm ~/.claude/CLAUDE.md
+fi
+```
+
+### Step 5 — Remove skill directory
+
+```bash
+rm -rf ~/.claude/skills/brain/
+```
+
+### Step 6 — Confirm
+
+```
+brain uninstalled.
+
+Removed:
+  ✓ Skill files (~/.claude/skills/brain/)
+  ✓ Hook scripts
+  ✓ Hook config from settings.json
+  ✓ Brain section from CLAUDE.md
+
+Not touched:
+  - .brain/ directories in your repos (still in git)
+  - Other skills, hooks, and settings
+
+Restart your Claude Code session to complete removal.
+```

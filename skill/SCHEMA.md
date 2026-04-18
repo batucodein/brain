@@ -40,8 +40,8 @@ Check for uncommitted changes AND recent commits since the last brain update:
 
 ```bash
 # Uncommitted changes (always check)
-git diff HEAD -- ':(exclude)*.lock' ':(exclude)package-lock.json' ':(exclude)go.sum' 2>/dev/null | head -300
-git diff --cached -- ':(exclude)*.lock' ':(exclude)package-lock.json' ':(exclude)go.sum' 2>/dev/null | head -300
+git diff HEAD -- ':(exclude)*.lock' ':(exclude)package-lock.json' ':(exclude)go.sum' ':(exclude).brain/' 2>/dev/null | head -300
+git diff --cached -- ':(exclude)*.lock' ':(exclude)package-lock.json' ':(exclude)go.sum' ':(exclude).brain/' 2>/dev/null | head -300
 
 # Commits since last brain update (only if brain has been committed before)
 LAST_BRAIN=$(git log -1 --format=%ci -- .brain/ 2>/dev/null)
@@ -84,11 +84,13 @@ For each categorized change, look back through the conversation for the 5 event 
 
 For each page that needs updating:
 1. Read the current content.
-2. Add new entries at the top (newest first) for `history.md`, `decisions.md`, `bugs.md`.
-3. Replace in-place for `index.md`, `architecture.md`, `patterns.md`.
-4. Follow the format rules in this file. Every entry needs `**Date:** YYYY-MM-DD`.
-5. Add `[[wikilinks]]` to connect related entries across pages.
-6. If a significant new feature was built and no `features/X.md` exists, create one.
+2. Verify frontmatter is intact: `type:` and `updated:` fields must exist. If missing, add them.
+3. Update the `updated:` frontmatter field to today's date (YYYY-MM-DD) before writing content.
+4. Add new entries at the top (newest first) for `history.md`, `decisions.md`, `bugs.md`.
+5. Replace in-place for `index.md`, `architecture.md`, `patterns.md`.
+6. Follow the format rules in this file. Every entry needs `**Date:** YYYY-MM-DD`.
+7. Add `[[wikilinks]]` to connect related entries across pages.
+8. If a significant new feature was built and no `features/X.md` exists, create one.
 
 **Writing rules:**
 - Lead with the WHY, not the WHAT. Bad: "Added Redis caching." Good: "Added Redis caching to avoid redundant API calls — same queries were hitting the API repeatedly, costing money and adding latency."
@@ -96,16 +98,44 @@ For each page that needs updating:
 - For bugs, always include root cause and lesson.
 - Keep entries to 1-3 short paragraphs. Brain is context, not documentation.
 
-#### 6. Commit with your code
+#### 6. Maintain topic page Timelines
 
-Include brain updates in the same commit as the code changes they describe. Update brain pages before committing, then stage everything together:
+After writing updates to event-type pages (decisions/bugs/history/features), check for existing topic pages and append matching Timeline entries:
+
+1. **List existing topics:** `ls .brain/topics/*.md 2>/dev/null`. If none, skip this step.
+2. **For each topic**, read its `## Overview` section to understand the topic's scope (what subsystem, concept, or concern it represents).
+3. **For each new entry written in this session**, match against every topic's scope:
+   - Keyword match on the topic's name, slug, or obvious synonyms in the new entry's header/body.
+   - If a match is found, append a Timeline bullet to that topic:
+     ```
+     - **YYYY-MM-DD** — <caption> [[<page>.md#<anchor>]]
+     ```
+     where `<anchor>` is the slug of the new `##` header you just wrote.
+   - After appending, re-sort the topic's full Timeline by `**Date:** YYYY-MM-DD` descending.
+   - Update the topic's frontmatter `updated:` to today's date.
+4. **Do NOT create new topic pages here.** Topic creation is user-initiated via `/brain topic <name>` only. If this session produced multiple events that seem to warrant a new topic (3+ entries touching the same domain with no matching topic), surface a suggestion:
+   > "This session touched `<domain>` in multiple places. Consider running `/brain topic <domain>` to create a synthesis page."
+   Wait for user action; do not create the file.
+
+The wikilink is the authoritative connection between topic and event. The caption is a hint for readers and may drift — doctor enforces wikilink resolution, not caption accuracy.
+
+#### 7. Commit brain updates
+
+**If you haven't committed yet:** Stage brain pages with your code — one commit:
 
 ```bash
 git add .brain/ src/
 git commit -m "feat: add Google OAuth login"
 ```
 
-One change = one commit. Brain pages are part of the change, not a separate event.
+**If the code was already committed (e.g., post-commit hook):** Create a separate brain commit:
+
+```bash
+git add .brain/
+git commit -m "brain: captured OAuth decision and auth architecture change"
+```
+
+Brain commits use the `brain:` prefix so they're identifiable in git log.
 
 ### Before Session End
 
@@ -119,8 +149,9 @@ If significant changes were made during the session, suggest updating brain. Be 
 4. **Use absolute dates.** Always `YYYY-MM-DD`. Never "yesterday" or "last week."
 5. **Don't duplicate README.** Reference it: "See README.md for setup instructions."
 6. **Respect existing content.** Preserve what others wrote. Add, don't replace (unless correcting errors).
-7. **Commit together.** Include brain updates in the same commit as the code they describe. Update brain pages before committing.
+7. **Commit brain updates.** If updating before committing, stage `.brain/` with your code — one commit. If updating after a commit (post-commit hook), create a separate commit with `brain:` prefix.
 8. **Compaction.** When any page exceeds 30 entries or 150 lines, move entries older than 3 months to `.brain/archive/<page>-<year>.md`.
+9. **Maintain frontmatter.** Every page needs valid frontmatter with `type:` (one of: index, architecture, decisions, patterns, history, bugs, feature, topic, custom, archive) and `updated:` (YYYY-MM-DD). Update `updated:` to today's date whenever you modify a page.
 
 ---
 
@@ -136,6 +167,8 @@ If significant changes were made during the session, suggest updating brain. Be 
 ├── history.md          # Timeline of significant changes
 ├── bugs.md             # Notable bugs, root causes, fixes
 ├── features/           # One page per significant feature (lifecycle tracking)
+│   └── *.md
+├── topics/             # Cross-cutting narrative synthesis (optional, user-created)
 │   └── *.md
 ├── archive/            # Compacted old entries
 │   └── *.md
@@ -176,7 +209,9 @@ Content here. Use markdown normally.
 | `history`      | `history.md`      | Timeline of significant milestones and changes  |
 | `bugs`         | `bugs.md`         | Notable bugs with root cause and fix             |
 | `feature`      | `features/*.md`   | Lifecycle of a significant feature — one page per feature |
+| `topic`        | `topics/*.md`     | Cross-cutting narrative synthesizing events from decisions/bugs/history/features — one page per domain |
 | `custom`       | `custom/*.md`     | Team-defined pages for domain-specific context   |
+| `archive`      | `archive/*.md`    | Compacted old entries from history/decisions/bugs — searchable, not loaded at session start |
 
 ## Content Guidelines
 
@@ -434,6 +469,56 @@ Working. Handles ~2k deliveries/min. Retry logic covers transient failures. Dead
 
 **When to create a feature page:** When a feature spans multiple sessions, involves architectural decisions, or is complex enough that a future developer would ask "what's the story here?" Not every small change needs one — only features that have a lifecycle.
 
+### topics/*.md
+
+A topic page synthesizes the story of a domain that crosses event boundaries — a subsystem (Redis, auth), a concept (caching strategy), a recurring concern (performance, security). Unlike `features/*.md` (one feature's full lifecycle), a topic touches multiple features, decisions, and bugs over time. Topic pages solve the "history of a topic is scattered across decisions/bugs/history/features" problem by providing a canonical narrative hub.
+
+```markdown
+---
+type: topic
+updated: 2026-04-16
+---
+
+# Redis
+
+## Overview
+Redis serves as the session cache and pub/sub backbone for cache invalidation across API instances. Adopted 2026-01.
+
+## Timeline
+
+- **2026-04-16** — Fixed OOM crash by capping maxmemory at 4GB and enabling LRU eviction. See [[bugs.md#redis-oom-crash-under-load]].
+- **2026-03-22** — Fixed connection pool exhaustion during peak hours (pool size raised 20 → 100). See [[bugs.md#redis-connection-pool-exhaustion]].
+- **2026-01-10** — Chose Redis over Memcached for pub/sub invalidation support. See [[decisions.md#chose-redis-over-memcached-for-session-caching]].
+
+## Key Decisions
+- [[decisions.md#chose-redis-over-memcached-for-session-caching]]
+- [[decisions.md#redis-cluster-sharding-strategy]]
+
+## Related
+- Features: [[features/session-auth.md]], [[features/rate-limiting.md]]
+- Topics: [[topics/caching.md]]
+
+## Current Status
+Active. Running Redis 7 in cluster mode with 3 shards. Memory-related incidents have recurred three times; architectural review is on the watchlist for 2026-Q3.
+```
+
+**Authoring rules:**
+- Timeline entries are `**YYYY-MM-DD** — caption [[page.md#anchor]]`. The wikilink is authoritative; the caption is a hint for readers and may drift over time.
+- **Creation is user-initiated only.** Create via `/brain topic <name>`. The LLM does NOT auto-create topic pages during `/brain update` or `/brain init` — this prevents weak, sticky topics.
+- **Maintenance is automatic.** During `/brain update`, the LLM checks existing topics and appends Timeline wikilinks for any session events that match a topic's scope.
+- **Not compacted.** Topic pages are the canonical narrative across archive boundaries. When an event page is compacted, the topic's Timeline wikilink may need to be repointed at the archive path — doctor flags this for manual repoint.
+- **Kept small.** Topics rarely exceed 150 lines. If one grows too large, split it (e.g., `topics/redis.md` → `topics/redis-ops.md` + `topics/redis-data-model.md`).
+
+**Topics vs Custom vs Features:**
+
+| Type | Shape | Example |
+|------|-------|---------|
+| `features/<name>.md` | One feature's full lifecycle | `features/webhook-delivery.md` |
+| `topics/<name>.md`   | One domain's cross-cutting story | `topics/redis.md`, `topics/auth.md` |
+| `custom/<name>.md`   | Team-defined reference docs | `custom/onboarding.md`, `custom/runbook-oncall.md` |
+
+Rule of thumb: if the page is a *narrative about how a thing evolved*, it's a topic. If it's a *standalone reference document* (runbook, onboarding checklist, API conventions), it's custom. Features are the middle ground: a single shipping feature's lifecycle.
+
 ## Linking with [[wikilinks]]
 
 Brain pages reference each other using `[[wikilinks]]`. This connects entries across pages so the LLM can trace a feature's full story.
@@ -462,6 +547,9 @@ Section headers become anchors by lowercasing and hyphenating:
 | Feature references its decisions | `features/X.md` → `[[decisions.md#anchor]]` |
 | Feature references its bugs | `features/X.md` → `[[bugs.md#anchor]]` |
 | Bug caused by an architectural decision | `bugs.md` → `[[decisions.md#anchor]]` |
+| Any entry to its domain topic | `bugs.md` / `decisions.md` / `features/X.md` → `[[topics/Y.md]]` |
+| Topic's Timeline back to its events | `topics/Y.md` → `[[decisions.md#anchor]]`, `[[bugs.md#anchor]]`, `[[features/X.md]]` |
+| Feature references a broader topic | `features/X.md` `## Related` → `[[topics/Y.md]]` |
 
 ### How the LLM Uses Links
 
@@ -477,6 +565,8 @@ This is what makes `.brain/` a wiki, not a log.
 
 Every entry in `history.md`, `decisions.md`, `bugs.md`, and `features/*.md` timelines MUST have a `**Date:** YYYY-MM-DD` line immediately after the `## ` header. Full date required — never month-only (`2026-03`), never relative. This enables chronological sorting in the dashboard.
 
+**Exact format required:** `YYYY-MM-DD` where YYYY is 4 digits, MM is 01-12 (with leading zero), DD is 01-31 (with leading zero). Must match regex `^\d{4}-\d{2}-\d{2}$`.
+
 **Correct:**
 ```markdown
 ## Chose Redis over Memcached
@@ -484,13 +574,22 @@ Every entry in `history.md`, `decisions.md`, `bugs.md`, and `features/*.md` time
 Content here...
 ```
 
-**Wrong:**
+**Wrong examples:**
+- `2026-4-10` — missing leading zero on month
+- `2026-04-5` — missing leading zero on day
+- `04/10/2026` — wrong separator
+- `April 10, 2026` — text instead of digits
+- `10-04-2026` — wrong order (DD-MM-YYYY)
+
+**Wrong placement:**
 ```markdown
 ## 2026-04-10 — Chose Redis over Memcached
 Content here...
 ```
 
 The date goes in a `**Date:**` field, not in the header. Headers are for titles only.
+
+Also: frontmatter `updated:` field uses the same YYYY-MM-DD format.
 
 ## What NOT to Put in .brain/
 
@@ -514,13 +613,55 @@ When a page exceeds **30 entries** or **150 lines**, compact it:
 
 Archive files use the same frontmatter with `type: archive`. They are still in git, still searchable, but not loaded into LLM context at session start.
 
+**Topic pages are NOT compacted.** `topics/*.md` pages serve as the canonical narrative across archive boundaries. When an event is moved from `decisions.md` to `archive/decisions-2025.md`, any topic Timeline wikilink that pointed at the original path (e.g., `[[decisions.md#chose-redis]]`) will break — the doctor flags these with a specific recovery hint ("slug matches header in `archive/...` — repoint the wikilink"). This is the expected workflow: compact the event page, then repoint the topic's Timeline entry.
+
 ## Merge Conflict Guidance
 
-Brain pages are designed to be merge-friendly:
+Brain pages are designed to be merge-friendly, but newest-first ordering in
+`history.md`, `decisions.md`, `bugs.md` means parallel entries land at the same
+line position and git flags a conflict. When you hit one, classify the conflict
+first — the resolution depends on which case it is.
 
-- `history.md`, `decisions.md`, `bugs.md` are append-only with dates — keep both entries, order by date.
-- `index.md`, `architecture.md`, `patterns.md` may have real conflicts — read both versions and pick the more current one, or combine if both changes are valid.
-- When in doubt, keep both versions and let the next session reconcile.
+### Case 1 — Both sides added new entries (the common case)
+
+Both branches inserted a new `## ` section just under the page's `#` heading,
+OR both branches appended Timeline bullets under a `## Timeline` section
+(applies to `features/*.md` and `topics/*.md` Timelines as well as
+`history.md`, `decisions.md`, `bugs.md`).
+This is a false-alarm conflict: both entries are correct, non-overlapping work.
+
+Resolve mechanically:
+1. Keep both entries — do not drop either side.
+2. Sort all entries under the `#` heading (or under `## Timeline`) by
+   `**Date:** YYYY-MM-DD` descending (newest first).
+3. Set frontmatter `updated:` to the max date across all entries in the file.
+4. Delete the `<<<<<<<`, `=======`, `>>>>>>>` markers.
+
+No human judgment is needed for this case.
+
+### Case 2 — Both sides edited the same existing entry (rare but real)
+
+Two branches modified the body, status, or metadata of the same `## ` section
+(e.g., both changed `**Status:**`, both added a "Follow-up" note, one fixed a
+typo while the other added a wikilink). This is a genuine coordination issue.
+
+Do not mechanically union — you may produce a nonsense entry with duplicate
+`**Date:**` or `**Status:**` lines.
+
+Resolve as follows:
+1. Read both versions carefully.
+2. If both updates are valid, combine them into a single coherent entry.
+3. If they contradict (e.g., `Status: Fixed` vs `Status: WontFix`), pick the
+   correct one based on the actual project state — read the code, check git
+   history, or ask the developer.
+4. Note the reconciliation briefly in the entry body if the conflict revealed
+   a disagreement worth remembering.
+
+### Case 3 — Conflicts in `index.md`, `architecture.md`, `patterns.md`
+
+These are prose pages, not append-only lists. Read both versions, pick the
+more current one, or combine if both changes are valid. When in doubt, keep
+both versions inline and let the next session reconcile.
 
 ## Platform Integration
 
@@ -529,20 +670,20 @@ The repo's `CLAUDE.md`, `.cursor/rules`, and `AGENTS.md` point LLM tools to this
 **CLAUDE.md** (Claude Code):
 ```
 # Project Brain
-Read .brain/SCHEMA.md at session start for instructions on working with this project's brain.
-Read .brain/index.md for project context.
+This repo has .brain/ project memory. Read .brain/index.md for project context.
+When updating brain pages, read .brain/SCHEMA.md for format rules and update instructions.
 ```
 
 **.cursor/rules** (Cursor):
 ```
-Read .brain/SCHEMA.md at session start for instructions on working with this project's brain.
-Read .brain/index.md for project context.
+This repo has .brain/ project memory. Read .brain/index.md for project context.
+When updating brain pages, read .brain/SCHEMA.md for format rules and update instructions.
 ```
 
 **AGENTS.md** (Codex):
 ```
-Read .brain/SCHEMA.md at session start for instructions on working with this project's brain.
-Read .brain/index.md for project context.
+This repo has .brain/ project memory. Read .brain/index.md for project context.
+When updating brain pages, read .brain/SCHEMA.md for format rules and update instructions.
 ```
 
 ## Custom Pages
