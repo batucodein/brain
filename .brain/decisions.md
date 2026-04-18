@@ -5,6 +5,16 @@ updated: 2026-04-18
 
 # Decisions
 
+## Scoped support to Claude Code only; format stays tool-agnostic
+**Date:** 2026-04-19
+**Context:** The README over-claimed that brain "works with any LLM coding tool" (Cursor, Codex, Claude Code). In reality Tiers 2 (skill) and 3 (hooks) are Claude Code specific by construction; Tier 1 (zero install) is theoretically tool-agnostic but has never been tested on anything except Claude Code. Claim didn't match tested reality.
+**Decision:** Scope the README to say "Supported on Claude Code only." The `.brain/` format itself (markdown + wikilinks + SCHEMA.md) stays tool-agnostic — `/brain init` still writes to `.cursor/rules` / `AGENTS.md` if they exist, as a speculative hook. But we don't promise what we haven't tested.
+**Alternatives considered:**
+- Keep multi-tool claims + label them "theoretical" — rejected, still overpromises
+- Rip out all multi-tool code (stop writing Cursor/Codex pointers in /brain init) — rejected for now, low-cost forward hook we might activate later with real testing
+- Stay silent on the scope — rejected, users would ask "does this work with Cursor?" and get no clear answer
+**Status:** Active. README scoped down on 2026-04-19; code still has the multi-tool scaffolding for future reactivation. See [[topics/zero-install.md]] — the format's portability is still real, we just don't claim its tool-coverage yet.
+
 ## Organic-archive-discovery via SCHEMA guidance, not session-start listing
 **Date:** 2026-04-18
 **Context:** Archive-discovery guidance existed for 3 paths (`/brain query` ranking, wikilink resolution fallback, doctor invariant) but was absent for ORGANIC conversation — a user asking "what was the X thing years ago?" without typing `/brain query` had no trigger to make the LLM check archive. Gap surfaced during architecture walkthrough.

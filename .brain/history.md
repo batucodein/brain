@@ -5,6 +5,10 @@ updated: 2026-04-18
 
 # History
 
+## README scoped down — Claude Code only, format stays tool-agnostic
+**Date:** 2026-04-19
+Removed unverified multi-tool claims from README. Cursor and Codex were listed in Platform Support and the Tier 1 description, but brain has only ever been tested on Claude Code. Now: explicit status banner ("Supported on Claude Code only"), Prerequisites lists Claude Code first, Platform Support section labels `.cursor/rules` and `AGENTS.md` paths as "speculative hooks for future multi-tool support, untested." The `/brain init` code still writes to those files if they exist — the hook remains, just no longer claimed as a supported feature. See [[decisions.md#scoped-support-to-claude-code-only-format-stays-tool-agnostic]].
+
 ## Closed organic-archive-discovery gap via SCHEMA guidance
 **Date:** 2026-04-18
 Added one bullet to SCHEMA § At Session Start telling the LLM to check `.brain/archive/*.md` when a question touches events older than active pages' date range. Closes the gap where organic conversation (no `/brain query`) wasn't guided to archive. Picked SCHEMA-side (per-update cost) over session-start listing (per-session cost) — better trade for a rare use case. See [[decisions.md#organic-archive-discovery-via-schema-guidance-not-session-start-listing]].

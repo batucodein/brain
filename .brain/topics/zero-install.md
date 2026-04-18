@@ -11,6 +11,7 @@ The foundational design principle that makes brain work across any LLM tool: a r
 
 ## Timeline
 
+- **2026-04-19** — Scoped README to claim Claude Code support only. The format itself (markdown + wikilinks + SCHEMA.md) remains tool-agnostic by design, but no testing has been done on Cursor / Codex. Honest positioning: promise what we've tested. See [[decisions.md#scoped-support-to-claude-code-only-format-stays-tool-agnostic]].
 - **2026-04-18** — Shipped prompting pass — sharpened LLM judgment via context + examples + confidence gates, instead of formalizing more rules (which would have crossed into dumbing). See [[decisions.md#sharpen-judgment-via-prompting-dont-formalize-it]].
 - **2026-04-18** — Accepted "LLM-as-enforcer drift" as a design trade-off. Strict mechanical enforcement would break zero-install (would require every LLM tool to agree on a linter). Documented in ARCHITECTURE.md §8.2.
 - **2026-04-12** — Three-tier architecture formalizes zero-install as Tier 1, with skill + hooks as optional Tier 2 and Tier 3. See [[decisions.md#adopted-three-tier-architecture]].
