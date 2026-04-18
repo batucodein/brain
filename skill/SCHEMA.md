@@ -106,11 +106,22 @@ After writing updates to event-type pages (decisions/bugs/history/features), che
 2. **For each topic**, read its `## Overview` section to understand the topic's scope (what subsystem, concept, or concern it represents).
 3. **For each new entry written in this session**, match against every topic's scope:
    - Keyword match on the topic's name, slug, or obvious synonyms in the new entry's header/body.
-   - If a match is found, append a Timeline bullet to that topic:
+   - If a match is found, construct the proposed Timeline bullet:
      ```
      - **YYYY-MM-DD** — <caption> [[<page>.md#<anchor>]]
      ```
-     where `<anchor>` is the slug of the new `##` header you just wrote.
+     where `<anchor>` is the slug of the new `##` header you just wrote, per SCHEMA.md § Anchor Slug Algorithm.
+   - **Write-time wikilink validation.** Before appending the bullet, verify the wikilink resolves:
+     - Does `<page>.md` exist? (You just wrote it this session, so it should — but confirm for robustness.)
+     - Does `<page>.md` contain a `## ` or `### ` header whose slug equals `<anchor>`? Run the slug algorithm from SCHEMA.md over each header and compare.
+     - If either check fails: DO NOT append the bullet. Instead, report to the user:
+       ```
+       Skipped topic maintenance for topics/<slug>.md — could not resolve proposed wikilink
+       [[<page>.md#<anchor>]]. The header may have been renamed or the entry wasn't written
+       to the expected page. Please check manually.
+       ```
+     - This prevents accidentally writing a broken wikilink that doctor would only catch later.
+   - If validation passes, append the bullet to the topic's `## Timeline` section.
    - After appending, re-sort the topic's full Timeline by `**Date:** YYYY-MM-DD` descending.
    - Update the topic's frontmatter `updated:` to today's date.
 4. **Do NOT create new topic pages here.** Topic creation is user-initiated via `/brain topic <name>` only. If this session produced multiple events that seem to warrant a new topic (3+ entries touching the same domain with no matching topic), surface a suggestion:
