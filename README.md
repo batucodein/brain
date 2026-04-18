@@ -65,6 +65,25 @@ Install hooks for fully automatic brain maintenance:
 
 The developer just works. Brain maintains itself.
 
+## Prerequisites
+
+- **bash** — runs the installer and hooks
+- **git** — brain is per-repo and ships with git history
+- **jq** — JSON processor used to register hooks in `~/.claude/settings.json` and by both hook scripts at runtime
+- **Claude Code** (or any LLM coding tool that reads `CLAUDE.md` / `.cursor/rules` / `AGENTS.md`)
+
+**Installing jq:**
+
+| Platform | Command |
+|---------|---------|
+| macOS | `brew install jq` |
+| Debian / Ubuntu | `sudo apt install jq` |
+| Fedora / RHEL | `sudo dnf install jq` |
+| Arch | `sudo pacman -S jq` |
+| Other | see [jqlang.org/download](https://jqlang.org/download/) |
+
+The installer detects missing jq and offers to install it for you if a supported package manager is available (macOS+brew, Debian+apt, Fedora+dnf, Arch+pacman). Otherwise it prints these instructions and exits.
+
 ## Install
 
 **One-liner (installs skill + hooks):**

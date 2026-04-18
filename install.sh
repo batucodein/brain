@@ -10,21 +10,82 @@ REPO_URL="https://raw.githubusercontent.com/batucodein/brain/main"
 # Preflight: jq is required for hook registration (modifies settings.json)
 # and at runtime by both hook scripts. Check BEFORE any mkdir/cp so a
 # partial install never happens.
-if ! command -v jq >/dev/null 2>&1; then
+#
+# If jq is missing and a known package manager is available, offer to
+# install jq automatically. We do NOT try to install package managers
+# themselves (brew, apt, etc.) — that's out of scope.
+install_jq_prompt() {
+    local pm="$1"       # e.g. "brew"
+    local cmd="$2"      # e.g. "brew install jq"
+    local needs_sudo="$3" # "yes" or "no"
+
     echo "ERROR: jq is required but not installed."
     echo ""
     echo "jq is a command-line JSON processor used to register brain's"
     echo "hooks in ~/.claude/settings.json and to produce JSON output"
     echo "from the hook scripts at runtime."
     echo ""
-    echo "Install jq:"
-    echo "  macOS:   brew install jq"
-    echo "  Debian:  sudo apt install jq"
-    echo "  Fedora:  sudo dnf install jq"
-    echo "  Arch:    sudo pacman -S jq"
+    echo "Detected package manager: $pm"
+    if [ "$needs_sudo" = "yes" ]; then
+        echo "This will run: $cmd  (requires sudo)"
+    else
+        echo "This will run: $cmd"
+    fi
     echo ""
-    echo "Then re-run this installer."
-    exit 1
+
+    # Read from /dev/tty so this works with `curl ... | bash`
+    local reply=""
+    if [ -r /dev/tty ]; then
+        printf "Install jq now? [y/N] "
+        read -r reply < /dev/tty || reply=""
+    fi
+
+    case "$reply" in
+        y|Y|yes|YES)
+            echo "Installing jq..."
+            if ! eval "$cmd"; then
+                echo "ERROR: '$cmd' failed. Install jq manually and re-run this installer."
+                exit 1
+            fi
+            if ! command -v jq >/dev/null 2>&1; then
+                echo "ERROR: jq still not on PATH after install. Check your shell config."
+                exit 1
+            fi
+            echo "jq installed successfully."
+            ;;
+        *)
+            echo "OK — install jq manually and re-run:"
+            echo "  $cmd"
+            exit 1
+            ;;
+    esac
+}
+
+if ! command -v jq >/dev/null 2>&1; then
+    # Detect platform and available package manager
+    if [ "$(uname)" = "Darwin" ] && command -v brew >/dev/null 2>&1; then
+        install_jq_prompt "brew (macOS)" "brew install jq" "no"
+    elif command -v apt-get >/dev/null 2>&1; then
+        install_jq_prompt "apt (Debian/Ubuntu)" "sudo apt-get install -y jq" "yes"
+    elif command -v dnf >/dev/null 2>&1; then
+        install_jq_prompt "dnf (Fedora/RHEL)" "sudo dnf install -y jq" "yes"
+    elif command -v pacman >/dev/null 2>&1; then
+        install_jq_prompt "pacman (Arch)" "sudo pacman -S --noconfirm jq" "yes"
+    else
+        # No known package manager detected — fall back to instructions
+        echo "ERROR: jq is required but not installed, and no supported package"
+        echo "manager (brew, apt, dnf, pacman) was detected on PATH."
+        echo ""
+        echo "Install jq manually:"
+        echo "  macOS:   brew install jq  (install brew first: https://brew.sh)"
+        echo "  Debian:  sudo apt install jq"
+        echo "  Fedora:  sudo dnf install jq"
+        echo "  Arch:    sudo pacman -S jq"
+        echo "  Other:   see https://jqlang.org/download/"
+        echo ""
+        echo "Then re-run this installer."
+        exit 1
+    fi
 fi
 
 # Parse args
