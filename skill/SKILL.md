@@ -21,7 +21,7 @@ Per-repo project memory tracked in git. Every developer who clones the repo gets
 /brain bug "<text>"       # Record a notable bug fix
 /brain history "<text>"   # Add a history entry
 /brain query "<question>" # Ask a question — search pages, follow links, synthesize answer
-/brain topic <name>       # Create or sync a topic page (cross-cutting narrative synthesis)
+/brain topic <name>       # Create or sync a topic page (add --sync [--keywords "a,b,c"] to backfill Timeline)
 /brain dashboard          # Generate interactive dashboard of all .brain/ entries
 /brain doctor             # Full diagnostic: integrity, format, content quality, staleness
 /brain uninstall          # Remove brain skill, hooks, and config from this machine
@@ -407,11 +407,30 @@ Shortcut to add a decision entry.
 ### Steps
 
 1. Read `.brain/decisions.md`.
-2. Add new entry at the top with today's date.
-3. Parse the user's text to extract: decision, context, alternatives if mentioned.
-4. Update `updated` date in frontmatter.
-5. Write the file.
-6. Confirm: `Added decision to .brain/decisions.md: "Chose PostgreSQL over MongoDB"`
+2. Parse the user's text to extract: decision, context, alternatives if mentioned. Derive a proposed `## ` header (first clause, title-cased).
+3. **Duplicate check.** Scan existing `## ` entries in the file. For each:
+   - If an entry has `**Date:** <today>` AND its header + first body line share ≥80% token overlap with the new proposed entry → flag as a likely duplicate.
+   - Show the user the existing entry and the proposed new one, then ask:
+     ```
+     Similar entry exists from today:
+
+       ## <existing header>
+       **Date:** <today>
+       <first line of existing body>
+
+     Proposed new entry:
+
+       ## <new header>
+       <proposed body>
+
+     Add anyway? (y/N)
+     ```
+     Default is `N`. Only proceed if user confirms `y` / `yes`.
+   - If no same-day near-duplicate is found, proceed silently.
+4. Add new entry at the top with today's date.
+5. Update `updated` date in frontmatter.
+6. Write the file.
+7. Confirm: `Added decision to .brain/decisions.md: "Chose PostgreSQL over MongoDB"`
 
 ---
 
@@ -427,11 +446,12 @@ Shortcut to record a notable bug.
 ### Steps
 
 1. Read `.brain/bugs.md`.
-2. Add new entry at the top with today's date.
-3. Parse the user's text to extract: symptom, root cause, fix.
-4. Update `updated` date in frontmatter.
-5. Write the file.
-6. Confirm: `Added bug to .brain/bugs.md: "Race condition in webhook delivery"`
+2. Parse the user's text to extract: symptom, root cause, fix. Derive a proposed `## ` header.
+3. **Duplicate check.** Same rule as `/brain decide` step 3: if any existing entry has `**Date:** <today>` and ≥80% token overlap with the new proposed entry, prompt `Add anyway? (y/N)` (default N).
+4. Add new entry at the top with today's date.
+5. Update `updated` date in frontmatter.
+6. Write the file.
+7. Confirm: `Added bug to .brain/bugs.md: "Race condition in webhook delivery"`
 
 ---
 
@@ -447,10 +467,29 @@ Shortcut to add a history entry.
 ### Steps
 
 1. Read `.brain/history.md`.
-2. Add new entry at the top with today's date.
-3. Update `updated` date in frontmatter.
-4. Write the file.
-5. Confirm: `Added to .brain/history.md: "Migrated from REST to gRPC"`
+2. Derive a proposed `## ` header from the user's text.
+3. **Duplicate check.** Same rule as `/brain decide` step 3: if any existing entry has `**Date:** <today>` and ≥80% token overlap with the new proposed entry, prompt `Add anyway? (y/N)` (default N).
+4. Add new entry at the top with today's date.
+5. Update `updated` date in frontmatter.
+6. Write the file.
+7. Confirm: `Added to .brain/history.md: "Migrated from REST to gRPC"`
+
+---
+
+### Duplicate-detection algorithm (shared by decide/bug/history)
+
+```
+Given proposed entry with header H_new and first body line B_new:
+  For each existing entry E in the file with **Date:** == today:
+    tokens_new    = lowercase words from (H_new + " " + B_new), split on whitespace + punctuation
+    tokens_exist  = same from E
+    overlap       = |tokens_new ∩ tokens_exist| / min(|tokens_new|, |tokens_exist|)
+    if overlap >= 0.80:
+      flag as near-duplicate, show both, prompt y/N
+      stop at first match (don't flood user with every similar entry)
+```
+
+This is **warn-only, never hard-block** — the user always has the final say. It catches the common mistake of running the same `/brain decide` twice on the same day, without preventing legitimate same-day entries on related topics.
 
 ---
 
@@ -462,21 +501,30 @@ Topic creation is **explicit, user-initiated only**. The LLM never auto-creates 
 
 ### Usage
 ```
-/brain topic <name>            # Create topics/<slug>.md from template if missing
-/brain topic <name> --sync     # Scan event pages for entries matching <name>;
-                                 propose Timeline wikilinks for confirmation
+/brain topic <name>                      # Create topics/<slug>.md from template if missing
+/brain topic <name> --sync               # Scan event pages for entries; LLM-guessed synonyms
+/brain topic <name> --sync --keywords "a,b,c"   # Sync using EXPLICIT keyword list (no synonym guessing)
 ```
 
 ### Steps
 
-1. **Slugify the name.** Lowercase, spaces→hyphens, strip punctuation. E.g. `Redis Caching` → `redis-caching`. Call this `<slug>`.
+1. **Validate the argument.**
+   - If `<name>` is missing or empty: print usage (`/brain topic <name> [--sync [--keywords "a,b,c"]]`), do NOT create anything, stop.
+   - Trim whitespace from `<name>`.
+   - Reject if `<name>` contains any of: `/`, `\`, `..`, leading `.`, null bytes, control characters. Print:
+     ```
+     Topic name cannot contain path separators or leading dot.
+     ```
+     Stop. No file is created.
 
-2. **Check existence.**
+2. **Slugify the name** per SCHEMA.md § Anchor Slug Algorithm (lowercase, strip punctuation, whitespace→hyphens, collapse hyphens, trim). Call this `<slug>`. Empty slug after slugification (e.g., name was all punctuation) → print error and stop.
+
+3. **Check existence.**
    ```bash
    test -f .brain/topics/<slug>.md && echo EXISTS || echo MISSING
    ```
 
-3. **If MISSING (no `--sync` needed):**
+4. **If MISSING and NOT --sync:**
    - Read the template at `~/.claude/skills/brain/templates/topic.md`. If the template is missing, tell the user the skill install is incomplete and suggest `~/.claude/skills/brain/install.sh` to restore it. Stop.
    - Substitute `{{TOPIC_NAME}}` with the user's original casing of `<name>` (e.g. "Redis Caching", not "redis-caching").
    - Substitute `{{DATE}}` with today's date in `YYYY-MM-DD`.
@@ -491,20 +539,33 @@ Topic creation is **explicit, user-initiated only**. The LLM never auto-creates 
      ```
    - Stop. Do NOT proceed to sync unless `--sync` was on the original command.
 
-4. **If EXISTS and `--sync` is passed (or file was just created AND `--sync` was passed):**
-   - Search event pages for keyword matches:
-     ```bash
-     grep -niE '(<name>|<slug>)' .brain/decisions.md .brain/bugs.md .brain/history.md .brain/features/*.md 2>/dev/null
+5. **If EXISTS and NOT --sync (collision):**
+   - Print:
      ```
-     If the user's `<name>` has obvious synonyms (e.g. "redis" → "cache", "caching", "session store"), also grep for those. When in doubt, ask the user which synonyms to include.
-   - For each match, identify the enclosing `## ` header (the entry) and its `**Date:**` line. Compute the anchor slug using SCHEMA.md's rule (lowercase, spaces→hyphens, strip punctuation).
-   - Propose Timeline entries in the format:
+     topics/<slug>.md already exists. Options:
+       • Edit the file directly if you want to update its Overview or Current Status
+       • Run /brain topic <name> --sync to pull in any new event entries
+       • If you meant a different topic, pick a distinct name
+     ```
+   - Stop. Do NOT overwrite or regenerate.
+
+6. **If --sync is passed** (works whether the file was just created or already existed):
+   - **Determine the keyword set:**
+     - If `--keywords "a,b,c"` was provided: use EXACTLY that comma-separated list (after trimming whitespace around each term). No LLM synonym expansion.
+     - Otherwise: start from `<name>` + `<slug>`; infer obvious synonyms (e.g., "redis" → "cache", "caching", "session store"). If the inference is uncertain, ask the user.
+   - **Search event pages:**
+     ```bash
+     grep -niE '(<keyword1>|<keyword2>|...)' .brain/decisions.md .brain/bugs.md .brain/history.md .brain/features/*.md 2>/dev/null
+     ```
+   - For each match, identify the enclosing `## ` header (the entry) and its `**Date:**` line. Compute the anchor slug using SCHEMA.md § Anchor Slug Algorithm.
+   - **Dedupe against existing Timeline** — before adding a proposed bullet, grep the topic's current Timeline for the specific `[[page.md#anchor]]`. If already present, silently skip that candidate (this prevents `--sync` from producing duplicates when re-run).
+   - Propose the REMAINING bullets to the user in the format:
      ```
      - **YYYY-MM-DD** — <short caption from the entry's header or first line> [[<page>.md#<anchor>]]
      ```
-     Show the user the full list of proposed additions and ask for confirmation:
+     Show the user the full list and ask for confirmation:
      ```
-     Found N entries that match "<name>". Propose adding to topics/<slug>.md Timeline:
+     Found N entries matching keywords (M already in Timeline, skipped). Propose adding to topics/<slug>.md:
 
        - **2026-04-10** — Chose Redis over Memcached [[decisions.md#chose-redis-over-memcached]]
        - **2026-03-22** — Fixed connection pool exhaustion [[bugs.md#redis-connection-pool-exhaustion]]
@@ -512,12 +573,13 @@ Topic creation is **explicit, user-initiated only**. The LLM never auto-creates 
 
      Add all? (y / select / skip)
      ```
+     If N is 0 (all matches already in Timeline), print "All matches already in Timeline — nothing to sync." and stop.
    - On confirmation, read `.brain/topics/<slug>.md`, locate the `## Timeline` section, append the proposed bullets, then sort all Timeline bullets by `**Date:** YYYY-MM-DD` descending (newest first).
    - Update the topic's `updated:` frontmatter to today's date.
    - Write the file.
    - Confirm to user: `Synced N entries into topics/<slug>.md Timeline.`
 
-5. **Never auto-create topic pages from any other command.** If `/brain update` detects a recurring theme that might deserve a topic, it SUGGESTS the user run `/brain topic <domain>` — it does not create the file itself.
+7. **Never auto-create topic pages from any other command.** If `/brain update` detects a recurring theme that might deserve a topic, it SUGGESTS the user run `/brain topic <domain>` — it does not create the file itself.
 
 ---
 
