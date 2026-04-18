@@ -30,6 +30,8 @@ The conversation is the only place where reasoning exists. Recognize these momen
 
 You don't need to write anything during the session — just recognize these moments so you can reference them when updating brain.
 
+**Proactive flush when the session grows:** after 3+ substantive events of the types above have accumulated in this session without a brain update, proactively offer `/brain update` to the user. Session context can be compacted or lost; partial WHY captured now beats complete WHY lost later.
+
 ### Updating .brain/ — The Process
 
 After significant code changes (or when asked to update brain), follow this process:
@@ -72,11 +74,21 @@ Continue only if at least one change involves a new feature, bug fix, architectu
 | **Architecture change** | `architecture.md` |
 | **Refactor** | `history.md`, `architecture.md` if structure changed |
 
+**When the category isn't obvious:** if the change could plausibly be two of {new feature, decision, pattern change, architecture change}, pick the best fit and note the alternative one line in the entry body (e.g., `Also has pattern-change aspects — kept as decision because the choice among alternatives was the driver.`). Do NOT stall on minor ambiguity. Ask the user only when you truly cannot pick.
+
+**Examples of reasoning (not rules):**
+- `Switching ORMs` → **decision**. A reversible choice among alternatives; capture what was weighed.
+- `Moved auth middleware from request-scoped to session-scoped` → **architecture change**. Changed where it runs in the stack, not just how it's written.
+
 #### 4. Extract the WHY from conversation
 
 For each categorized change, look back through the conversation for the 5 event types listed in "During the Session" above. Match changes to reasoning.
 
-**If no WHY exists in the conversation** for a change: Do NOT invent one. Either:
+**If the WHY is partial** (conversation has some signal but not the full rationale): capture what you have and explicitly mark the gap:
+`**Context:** [partial — speed was the driver; alternatives weren't discussed in session.]`
+This does NOT violate Rule #1 (never hallucinate) — invented WHY does; *documented partial* WHY does not. Partial beats placeholder.
+
+**If no WHY exists at all** in the conversation: Do NOT invent one. Either:
 - Ask the user what drove the change
 - Or write the entry with just the WHAT and mark it: `**Context:** To be filled — reasoning not captured in session.`
 
@@ -103,7 +115,7 @@ For each page that needs updating:
 After writing updates to event-type pages (decisions/bugs/history/features), check for existing topic pages and append matching Timeline entries:
 
 1. **List existing topics:** `ls .brain/topics/*.md 2>/dev/null`. If none, skip this step.
-2. **For each topic**, read its `## Overview` section to understand the topic's scope (what subsystem, concept, or concern it represents).
+2. **For each topic**, read its `## Overview` section to understand the topic's scope. **If the Overview is abstract** (e.g., "caching strategy", "data access patterns") OR the new entry uses terms not in the Overview, ALSO read the topic's 3 most recent Timeline bullets to see what events this topic typically absorbs.
 3. **For each new entry written in this session**, match against every topic's scope:
    - Keyword match on the topic's name, slug, or obvious synonyms in the new entry's header/body.
    - If a match is found, construct the proposed Timeline bullet:
@@ -111,6 +123,7 @@ After writing updates to event-type pages (decisions/bugs/history/features), che
      - **YYYY-MM-DD** — <caption> [[<page>.md#<anchor>]]
      ```
      where `<anchor>` is the slug of the new `##` header you just wrote, per SCHEMA.md § Anchor Slug Algorithm.
+   - **Wikilink target disambiguation.** If multiple `##` anchors on the target page share keywords with the new entry, prefer the newest (highest `**Date:**`) unless the new entry's narrative explicitly references an earlier one.
    - **Write-time wikilink validation.** Before appending the bullet, verify the wikilink resolves:
      - Does `<page>.md` exist? (You just wrote it this session, so it should — but confirm for robustness.)
      - Does `<page>.md` contain a `## ` or `### ` header whose slug equals `<anchor>`? Run the slug algorithm from SCHEMA.md over each header and compare.
@@ -124,9 +137,15 @@ After writing updates to event-type pages (decisions/bugs/history/features), che
    - If validation passes, append the bullet to the topic's `## Timeline` section.
    - After appending, re-sort the topic's full Timeline by `**Date:** YYYY-MM-DD` descending.
    - Update the topic's frontmatter `updated:` to today's date.
-4. **Do NOT create new topic pages here.** Topic creation is user-initiated via `/brain topic <name>` only. If this session produced multiple events that seem to warrant a new topic (3+ entries touching the same domain with no matching topic), surface a suggestion:
+4. **Do NOT create new topic pages here.** Topic creation is user-initiated via `/brain topic <name>` only. If this session produced multiple events that seem to warrant a new topic, surface a suggestion:
    > "This session touched `<domain>` in multiple places. Consider running `/brain topic <domain>` to create a synthesis page."
-   Wait for user action; do not create the file.
+
+   **Threshold for suggesting a new topic (be strict — weak topics are sticky):**
+   - 3+ entries across **multiple sessions** (not just this one) touching the same domain
+   - The entries aren't tightly coupled to a single feature (otherwise a `features/<name>.md` is the better home)
+   - The domain is likely to recur over time
+
+   If unsure, don't suggest — topics are easier to create later than to delete. Wait for user action; do not create the file.
 
 The wikilink is the authoritative connection between topic and event. The caption is a hint for readers and may drift — doctor enforces wikilink resolution, not caption accuracy.
 
@@ -565,6 +584,7 @@ Active. Running Redis 7 in cluster mode with 3 shards. Memory-related incidents 
 
 **Authoring rules:**
 - Timeline entries are `**YYYY-MM-DD** — caption [[page.md#anchor]]`. The wikilink is authoritative; the caption is a hint for readers and may drift over time.
+- **Caption quality: name the lever that moved.** Weak: `Fixed bug`. Strong: `Fixed Redis OOM by capping maxmemory at 4GB`. The goal is that a reader skimming the Timeline sees what actually changed, without having to follow the wikilink.
 - **Creation is user-initiated only.** Create via `/brain topic <name>`. The LLM does NOT auto-create topic pages during `/brain update` or `/brain init` — this prevents weak, sticky topics.
 - **Maintenance is automatic.** During `/brain update`, the LLM checks existing topics and appends Timeline wikilinks for any session events that match a topic's scope.
 - **Not compacted.** Topic pages are the canonical narrative across archive boundaries. When an event page is compacted, the topic's Timeline wikilink may need to be repointed at the archive path — doctor flags this for manual repoint.

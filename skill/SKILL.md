@@ -428,25 +428,23 @@ Shortcut to add a decision entry.
 
 1. Read `.brain/decisions.md`.
 2. Parse the user's text to extract: decision, context, alternatives if mentioned. Derive a proposed `## ` header (first clause, title-cased).
-3. **Duplicate check.** Scan existing `## ` entries in the file. For each:
-   - If an entry has `**Date:** <today>` AND its header + first body line share ≥80% token overlap with the new proposed entry → flag as a likely duplicate.
-   - Show the user the existing entry and the proposed new one, then ask:
-     ```
-     Similar entry exists from today:
+3. **Pre-insert checks (warn, never block).** Run BOTH checks below; combine any triggered warnings into a single y/N prompt (no double-prompting):
+   - **Duplicate check:** scan existing `## ` entries. If any has `**Date:** <today>` AND ≥80% token overlap with the new entry → flag.
+   - **Category-mismatch check:** does the user's text CLEARLY describe something other than a decision (e.g., text is about a bug fix, or a change that happened without alternatives being weighed)? Only trigger on clear contradiction — not on minor ambiguity.
 
-       ## <existing header>
-       **Date:** <today>
-       <first line of existing body>
+   Build a warning list with whichever of the two triggered, then prompt once:
+   ```
+   Before adding to decisions.md:
+     [• Similar entry from today: "<existing header>" ]
+     [• Text reads more like a <bug fix|history entry> than a decision. ]
 
-     Proposed new entry:
+   Proposed:
+     ## <new header>
+     <first body line>
 
-       ## <new header>
-       <proposed body>
-
-     Add anyway? (y/N)
-     ```
-     Default is `N`. Only proceed if user confirms `y` / `yes`.
-   - If no same-day near-duplicate is found, proceed silently.
+   Add anyway? (y/N)
+   ```
+   Default `N`. Proceed only on `y` / `yes`. If neither check triggered, proceed silently.
 4. Add new entry at the top with today's date.
 5. Update `updated` date in frontmatter.
 6. Write the file.
@@ -467,7 +465,11 @@ Shortcut to record a notable bug.
 
 1. Read `.brain/bugs.md`.
 2. Parse the user's text to extract: symptom, root cause, fix. Derive a proposed `## ` header.
-3. **Duplicate check.** Same rule as `/brain decide` step 3: if any existing entry has `**Date:** <today>` and ≥80% token overlap with the new proposed entry, prompt `Add anyway? (y/N)` (default N).
+3. **Pre-insert checks (warn, never block).** Run BOTH and combine into one y/N prompt — same shape as `/brain decide` step 3:
+   - Duplicate check (≥80% same-day token overlap).
+   - Category-mismatch: does the text CLEARLY describe something other than a bug (a decision, a new feature, a history entry)? Only trigger on clear contradiction.
+
+   If either triggers, prompt once with all triggered warnings listed; default `N`.
 4. Add new entry at the top with today's date.
 5. Update `updated` date in frontmatter.
 6. Write the file.
@@ -488,7 +490,11 @@ Shortcut to add a history entry.
 
 1. Read `.brain/history.md`.
 2. Derive a proposed `## ` header from the user's text.
-3. **Duplicate check.** Same rule as `/brain decide` step 3: if any existing entry has `**Date:** <today>` and ≥80% token overlap with the new proposed entry, prompt `Add anyway? (y/N)` (default N).
+3. **Pre-insert checks (warn, never block).** Run BOTH and combine into one y/N prompt — same shape as `/brain decide` step 3:
+   - Duplicate check (≥80% same-day token overlap).
+   - Category-mismatch: does the text CLEARLY describe something other than a history entry (a decision with alternatives, a bug, or architectural-change prose)? Only trigger on clear contradiction.
+
+   If either triggers, prompt once with all triggered warnings listed; default `N`.
 4. Add new entry at the top with today's date.
 5. Update `updated` date in frontmatter.
 6. Write the file.
@@ -496,7 +502,11 @@ Shortcut to add a history entry.
 
 ---
 
-### Duplicate-detection algorithm (shared by decide/bug/history)
+### Pre-insert checks (shared by decide/bug/history)
+
+Two checks run before any insertion. Any combination of triggered warnings folds into ONE y/N prompt — never two prompts in a row.
+
+**1. Duplicate detection**
 
 ```
 Given proposed entry with header H_new and first body line B_new:
@@ -505,11 +515,39 @@ Given proposed entry with header H_new and first body line B_new:
     tokens_exist  = same from E
     overlap       = |tokens_new ∩ tokens_exist| / min(|tokens_new|, |tokens_exist|)
     if overlap >= 0.80:
-      flag as near-duplicate, show both, prompt y/N
-      stop at first match (don't flood user with every similar entry)
+      flag as near-duplicate
+      stop at first match (don't flood with every similar entry)
 ```
 
-This is **warn-only, never hard-block** — the user always has the final say. It catches the common mistake of running the same `/brain decide` twice on the same day, without preventing legitimate same-day entries on related topics.
+**2. Category-mismatch detection**
+
+Trigger ONLY on clear contradiction between the user's command and the content of their text — not on minor ambiguity. The user already picked the command; don't re-litigate every nuance.
+
+Clear-contradiction examples (do trigger):
+- `/brain bug "we decided to use Redis because of pub/sub"` → reads like a decision; no bug mentioned.
+- `/brain decide "shipped the billing page yesterday"` → reads like a history entry; no alternatives weighed.
+- `/brain history "PostgreSQL random crashes trace back to wal_level misconfiguration"` → reads like a bug; root cause + symptom pattern.
+
+Not-clear-enough examples (do NOT trigger):
+- `/brain decide "Chose Redis for caching"` — valid decision even without alternatives explicitly stated.
+- `/brain bug "Race condition in webhook delivery"` — valid bug even without full RCA in the command.
+- `/brain history "Migrated from REST to gRPC for internal services"` — valid history even if a decision was involved upstream.
+
+**Prompt shape (one combined y/N):**
+
+```
+Before adding to <target file>.md:
+  [• Similar entry from today: "<existing header>"]
+  [• Text reads more like a <other category> than a <chosen category>.]
+
+Proposed:
+  ## <new header>
+  <first body line>
+
+Add anyway? (y/N)
+```
+
+This is **warn-only, never hard-block** — the user always has the final say. Both checks are intentionally conservative: they flag the common mistakes (same-day re-typing, running the wrong command) without pedantically challenging every borderline entry.
 
 ---
 
