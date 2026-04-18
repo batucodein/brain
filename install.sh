@@ -7,6 +7,26 @@ CLAUDE_MD="$HOME/.claude/CLAUDE.md"
 SETTINGS="$HOME/.claude/settings.json"
 REPO_URL="https://raw.githubusercontent.com/batucodein/brain/main"
 
+# Preflight: jq is required for hook registration (modifies settings.json)
+# and at runtime by both hook scripts. Check BEFORE any mkdir/cp so a
+# partial install never happens.
+if ! command -v jq >/dev/null 2>&1; then
+    echo "ERROR: jq is required but not installed."
+    echo ""
+    echo "jq is a command-line JSON processor used to register brain's"
+    echo "hooks in ~/.claude/settings.json and to produce JSON output"
+    echo "from the hook scripts at runtime."
+    echo ""
+    echo "Install jq:"
+    echo "  macOS:   brew install jq"
+    echo "  Debian:  sudo apt install jq"
+    echo "  Fedora:  sudo dnf install jq"
+    echo "  Arch:    sudo pacman -S jq"
+    echo ""
+    echo "Then re-run this installer."
+    exit 1
+fi
+
 # Parse args
 MODE="full"
 while [ $# -gt 0 ]; do

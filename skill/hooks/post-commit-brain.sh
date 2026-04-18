@@ -3,6 +3,15 @@
 # Fires after git commit via Bash tool. If .brain/ exists but wasn't updated
 # in this commit, nudges the LLM to check for brain-worthy changes.
 
+# jq fallback: if jq is missing, emit a static warning via heredoc
+# (no jq, no dynamic content) and exit cleanly. Prevents silent failure.
+if ! command -v jq >/dev/null 2>&1; then
+    cat <<'EOF'
+{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"brain: WARNING — jq is not installed. brain post-commit hook is degraded (no update nudge). Install jq: brew install jq (macOS) / sudo apt install jq (Debian) / sudo dnf install jq (Fedora), then restart your session."}}
+EOF
+    exit 0
+fi
+
 read -r input_json
 
 CWD=$(echo "$input_json" | jq -r '.cwd // empty')

@@ -120,6 +120,10 @@ not duplicate it.
 - `.brain/SCHEMA.md` first line (version header) matches
   `~/.claude/skills/brain/SCHEMA.md` first line. Mismatch suggests the repo is
   pinned to an older schema and may need migration review.
+- **`jq` is available on PATH** — `command -v jq` must succeed. `jq` is used by
+  `install.sh` (to register hooks in settings.json) and by both hooks at
+  runtime (to emit JSON to Claude Code). If missing, the hooks fall back to a
+  static WARNING message and full functionality is degraded.
 
 ---
 
@@ -152,6 +156,7 @@ consent).
 | `.brain/SCHEMA.md` missing | skill not installed | Reinstall skill: `curl -fsSL https://raw.githubusercontent.com/batucodein/brain/main/install.sh \| bash` |
 | Hook file missing from `~/.claude/hooks/` | skill installed | **AUTO**: `~/.claude/skills/brain/install.sh --hooks-only` |
 | Hook file present but not registered in settings.json | skill installed | **AUTO**: `~/.claude/skills/brain/install.sh --hooks-only` |
+| `jq` not on PATH (`command -v jq` fails) | — | MANUAL: install jq. `brew install jq` (macOS) / `sudo apt install jq` (Debian) / `sudo dnf install jq` (Fedora) / `sudo pacman -S jq` (Arch). Not auto-fixable — package install is too platform-specific for the whitelist. |
 | SCHEMA version mismatch (repo vs local) | — | REVIEW: diff the two files; decide whether to update `.brain/SCHEMA.md` and verify your existing pages still conform |
 | `.brain/` in `.gitignore` | — | REVIEW: repo policy — remove entry from `.gitignore`, then `git add .brain/` |
 | Brain older than code (sync) | — | MANUAL: run `/brain update` in a session that has the relevant code context |

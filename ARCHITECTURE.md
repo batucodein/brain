@@ -1067,7 +1067,7 @@ brain pages are designed merge-friendly, but conflicts still happen. SCHEMA.md �
 | `~/.claude/skills/brain/SCHEMA.md` | `/brain init` can't copy to repo; topic/doctor reference broken | MEDIUM — `/brain init` blocked, docs degrade |
 | `~/.claude/skills/brain/DIAGNOSTICS.md` | `/brain doctor` cannot run | LOW — doctor is a periodic check, not critical path |
 | `~/.claude/skills/brain/templates/*.md` | `/brain init` can't generate pages | MEDIUM — init blocked; existing brains OK |
-| `jq` binary | Both hooks fail silently | HIGH — auto-update stops working silently |
+| `jq` binary | install.sh preflight blocks install; hooks emit a static WARNING via heredoc | MEDIUM — loud, not silent; full features degraded but user sees the warning |
 | `~/.claude/hooks/*.sh` | Hooks don't fire; manual-only mode | MEDIUM — tier 3 degrades to tier 2 |
 | `~/.claude/settings.json` hook registration | Hooks exist but never run | HIGH + silent |
 | LLM behavior | Correct? Non-deterministic updates | Always a factor |
@@ -1181,9 +1181,9 @@ Consolidated list of all known gaps, bugs, and open architectural questions, wit
 | 10 | Compaction has no auto-trigger; user must notice | Low | Open. Doctor could flag threshold. |
 | 11 | Wikilink anchor slug algorithm undefined for special chars (em-dash, backticks, colons) | Medium | Open. Need explicit algorithm in SCHEMA. |
 | 14 | Post-commit hook fires on `git commit --amend` | Medium | Open. Could check `$(git rev-parse HEAD) != $(git rev-parse HEAD@{1})` to detect amend. |
-| 15 | `jq` dependency not preflight-checked | Medium | Open. Install should verify; hooks should degrade gracefully. |
+| 15 | `jq` dependency not preflight-checked | ~~Medium~~ | **Resolved.** Three-layer fix shipped: install.sh preflight (hard error with platform install hints), both hooks degrade to a static JSON WARNING when jq is absent, doctor flags missing jq via Installation invariant. |
 
-**Note:** issues #12 (merge conflict magnet) and #13 (archive type missing) were resolved during this session.
+**Note:** issues #12 (merge conflict magnet), #13 (archive type missing), and #15 (jq preflight) were resolved during this session.
 
 ### 10.2 New issues surfaced by this architectural audit
 
