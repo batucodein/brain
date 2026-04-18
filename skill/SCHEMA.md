@@ -17,6 +17,7 @@ If you are an LLM reading this file, follow these instructions. This section tel
    - New feature → `decisions.md`, related `features/*.md`
    - General question → search across all pages
 3. If the task relates to a specific feature, check if `features/X.md` exists and read it for full lifecycle context.
+4. **If the user's question touches events older than the active pages' date range** (dates preceding the oldest entry in the relevant active page, or mentions of multi-year-old work), also check `.brain/archive/*.md` before answering. Archive is cold storage — loaded on demand, not at session start. Under-reading archive gives incomplete answers; over-reading is harmless.
 
 ### During the Session — Track Reasoning
 
