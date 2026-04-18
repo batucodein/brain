@@ -1102,6 +1102,15 @@ brain pages are designed merge-friendly, but conflicts still happen. SCHEMA.md �
 
 This is by design — mechanical enforcement (linters, pre-commit hooks that validate schema) would fight the "any LLM can maintain brain" zero-install model. But it means drift is possible and slow corrections are inevitable.
 
+**Decision (issue #22): accepted trade-off.** Strict mechanical enforcement would either (a) break zero-install (only Claude Code users could maintain brain) or (b) require every LLM tool to agree on a common linter. Neither is acceptable. We accept that:
+
+1. **Drift is inevitable** — given enough sessions, some page will end up slightly malformed.
+2. **Doctor is the safety net** — periodic runs catch most drift; auto-fix whitelist handles the mechanical cases; everything else becomes a MANUAL finding the user can resolve.
+3. **SCHEMA cites-don't-duplicate** — every invariant in DIAGNOSTICS.md points at a SCHEMA section rather than copying its text. This minimizes where drift can creep into the spec itself.
+4. **The slug algorithm is the one rule that MUST be deterministic across LLMs** — we specify it as both prose AND a reference implementation in SCHEMA so different tools can't disagree (see SCHEMA § Anchor Slug Algorithm).
+
+If drift becomes a material problem in practice, an optional "strict mode" pre-commit hook could be added without breaking zero-install — opt-in for teams that want enforcement.
+
 ### 8.3 Dependency chain by boot order
 
 ```

@@ -278,6 +278,35 @@ updated: 2026-04-11
 **Status:** Active
 ```
 
+**Status field:** `Active`, `Superseded`, `Deprecated`, `Rejected` (considered but not taken).
+
+**When a decision is reversed or replaced:**
+
+Decisions are append-only. Never edit the prose of a past entry. But when a later decision supersedes an earlier one, add ONE permitted edit to the old entry — extend the Status line:
+
+```markdown
+## Chose Redis over Memcached for session caching
+**Date:** 2026-04-10
+**Context:** Needed server-side session store with invalidation support.
+**Decision:** Redis — pub/sub enables cache invalidation across instances.
+**Alternatives considered:** Memcached (simpler but no pub/sub), database sessions (too slow).
+**Status:** Superseded by [[decisions.md#switched-to-valkey-after-license-change]] (2026-06-15)
+```
+
+And add the new decision at the top (newest first) with full context:
+
+```markdown
+## Switched to Valkey after license change
+**Date:** 2026-06-15
+**Context:** Redis 7.4 license change made continued use of Redis incompatible with our redistribution model.
+**Decision:** Fork to Valkey (BSD-licensed Redis fork). API-compatible; migration is a rename.
+**Alternatives considered:** Dragonfly (commercial), in-house memcached wrapper (too much work).
+**Supersedes:** [[decisions.md#chose-redis-over-memcached-for-session-caching]]
+**Status:** Active
+```
+
+Add a corresponding history.md entry noting the switch. The `**Status:**` edit on the old entry is the ONLY permitted mutation to an already-recorded decision — do not rewrite Context, Decision, or Alternatives. History is authoritative.
+
 ### history.md
 
 Chronological log of significant changes. Newest first.
@@ -469,6 +498,27 @@ Working. Handles ~2k deliveries/min. Retry logic covers transient failures. Dead
 
 **When to create a feature page:** When a feature spans multiple sessions, involves architectural decisions, or is complex enough that a future developer would ask "what's the story here?" Not every small change needs one — only features that have a lifecycle.
 
+**When a feature is removed from the codebase:**
+
+**Never delete the feature page.** The WHY behind a removed feature is arguably more valuable than the WHY behind a current one — it explains the walked-away-from path. Instead:
+
+1. Update `## Current State` at the top of the feature page:
+   ```markdown
+   ## Current State
+   **Removed 2026-09-20** — see [[history.md#removed-webhook-delivery]] for context.
+   Kept in brain as narrative record.
+   ```
+2. Keep the rest of the page (Overview, Timeline, Key Files) intact — it's historical record now.
+3. Add a `history.md` entry explaining the removal with the WHY:
+   ```markdown
+   ## Removed webhook delivery feature
+   **Date:** 2026-09-20
+   Retired webhook delivery after migrating all subscribers to server-sent events. Webhook infra was load-bearing for 8 months but added operational complexity disproportionate to its use. See [[features/webhook-delivery.md]] for the lifecycle.
+   ```
+4. If clutter in `features/` becomes a problem after many removals, move removed features to `archive/features-<year>.md` following the same compaction rules — but this is a long-horizon cleanup, not a removal-time action.
+
+The feature page going forward shows "Removed" status. Its Timeline records what happened; its `Key Files` list is now a pointer to what used to exist (still valuable for anyone spelunking git history).
+
 ### topics/*.md
 
 A topic page synthesizes the story of a domain that crosses event boundaries — a subsystem (Redis, auth), a concept (caching strategy), a recurring concern (performance, security). Unlike `features/*.md` (one feature's full lifecycle), a topic touches multiple features, decisions, and bugs over time. Topic pages solve the "history of a topic is scattered across decisions/bugs/history/features" problem by providing a canonical narrative hub.
@@ -509,7 +559,7 @@ Active. Running Redis 7 in cluster mode with 3 shards. Memory-related incidents 
 - **Not compacted.** Topic pages are the canonical narrative across archive boundaries. When an event page is compacted, the topic's Timeline wikilink may need to be repointed at the archive path — doctor flags this for manual repoint.
 - **Kept small.** Topics rarely exceed 150 lines. If one grows too large, split it (e.g., `topics/redis.md` → `topics/redis-ops.md` + `topics/redis-data-model.md`).
 
-**Topics vs Custom vs Features:**
+**Topics vs Custom vs Features — decision tree:**
 
 | Type | Shape | Example |
 |------|-------|---------|
@@ -517,7 +567,39 @@ Active. Running Redis 7 in cluster mode with 3 shards. Memory-related incidents 
 | `topics/<name>.md`   | One domain's cross-cutting story | `topics/redis.md`, `topics/auth.md` |
 | `custom/<name>.md`   | Team-defined reference docs | `custom/onboarding.md`, `custom/runbook-oncall.md` |
 
-Rule of thumb: if the page is a *narrative about how a thing evolved*, it's a topic. If it's a *standalone reference document* (runbook, onboarding checklist, API conventions), it's custom. Features are the middle ground: a single shipping feature's lifecycle.
+Ask these three questions in order:
+
+```
+ 1. Does the page tell a chronological story with a Timeline section
+    (events + dates + wikilinks)?
+       │
+       ├── YES → question 2
+       │
+       └── NO  → it's custom/*.md
+                 (runbook, onboarding checklist, conventions doc,
+                  incident postmortem template, etc.)
+
+ 2. Is it about ONE shipping unit of product (a discrete feature,
+    integration, or user-facing capability)?
+       │
+       ├── YES → it's features/<name>.md
+       │         (webhook-delivery, oauth-login, billing-portal)
+       │
+       └── NO  → question 3
+
+ 3. Is it about a DOMAIN that shows up across multiple features —
+    a subsystem, a concept, or a recurring concern?
+       │
+       └── YES → it's topics/<name>.md
+                 (redis, auth, caching, performance, security)
+```
+
+**In practice:**
+- `features/oauth-login.md` — the lifecycle of *the OAuth login feature*: when shipped, what changed, which bugs hit it
+- `topics/auth.md` — *how authentication works in this project* as a whole — session storage, token rotation, OAuth providers, MFA — cross-references features/oauth-login.md, features/mfa.md, etc.
+- `custom/oncall-runbook.md` — a reference the oncall engineer reads during an incident; no chronology
+
+**When a page grows past its type:** a feature page that turns into a cross-cutting narrative (happens when one feature absorbs multiple subsystems) should be renamed and moved to `topics/`. The Timeline wikilinks in other pages pointing at the old path must be updated — doctor flags this.
 
 ## Linking with [[wikilinks]]
 
@@ -531,11 +613,52 @@ Brain pages reference each other using `[[wikilinks]]`. This connects entries ac
 [[features/webhook-delivery.md]]         → link to a feature page
 ```
 
-### Anchor Format
+### Anchor Slug Algorithm
 
-Section headers become anchors by lowercasing and hyphenating:
-- `## Chose Redis Queue for Webhooks` → `#chose-redis-queue-for-webhooks`
-- `## Race Condition in Webhook Delivery` → `#race-condition-in-webhook-delivery`
+Section headers become wikilink anchors via a deterministic slug algorithm. Every LLM that reads and writes wikilinks must apply this algorithm identically — otherwise links drift silently across sessions/tools.
+
+**Algorithm (GitHub-compatible):**
+
+1. Take the header text after the `##`/`###` marker.
+2. Strip leading/trailing whitespace.
+3. Lowercase everything.
+4. Remove all characters except: lowercase letters `a-z`, digits `0-9`, Unicode letters (ç, ş, ñ, etc.), whitespace, and hyphens `-`. Everything else — punctuation, backticks, em-dashes, slashes, colons, quotes, parentheses — is DELETED (not replaced with hyphens).
+5. Replace each run of whitespace with a single hyphen.
+6. Collapse consecutive hyphens to one.
+7. Strip leading and trailing hyphens.
+
+**Reference implementation (Python):**
+
+```python
+import re, unicodedata
+
+def slugify(header: str) -> str:
+    s = header.strip().lower()
+    # keep letters (incl. unicode), digits, whitespace, hyphens; drop the rest
+    s = ''.join(c for c in s
+                if c.isalnum() or c.isspace() or c == '-'
+                or unicodedata.category(c).startswith('L'))
+    s = re.sub(r'\s+', '-', s)      # whitespace → hyphen
+    s = re.sub(r'-+', '-', s)       # collapse runs
+    return s.strip('-')
+```
+
+**Worked examples:**
+
+| Header | Slug |
+|--------|------|
+| `## Chose Redis Queue for Webhooks` | `chose-redis-queue-for-webhooks` |
+| `## Race Condition in Webhook Delivery` | `race-condition-in-webhook-delivery` |
+| `## Redis — the \`SET\` command` | `redis-the-set-command` |
+| `## Why do we use JWTs?` | `why-do-we-use-jwts` |
+| `## Auth: tokens, cookies, and you` | `auth-tokens-cookies-and-you` |
+| `## Upgraded Postgres 14 → 16` | `upgraded-postgres-14-16` |
+| `## HTTP/2 rollout` | `http2-rollout` |
+| `## v2.0 release (2026-04-01)` | `v20-release-2026-04-01` |
+| `## Rate-limit: 100 req/sec` | `rate-limit-100-reqsec` |
+| `## Öğrenci kaydı akışı` | `öğrenci-kaydı-akışı` |
+
+The algorithm is stable: given the same header text, every tool and LLM produces the same slug. When in doubt about an edge case, run the Python reference above mentally — it's the source of truth.
 
 ### When to Link
 
@@ -613,6 +736,15 @@ When a page exceeds **30 entries** or **150 lines**, compact it:
 
 Archive files use the same frontmatter with `type: archive`. They are still in git, still searchable, but not loaded into LLM context at session start.
 
+**When an archive file itself exceeds 150 lines**, sub-split it by half-year:
+- `archive/history-2024.md` → split into `archive/history-2024-h1.md` (Jan–Jun) and `archive/history-2024-h2.md` (Jul–Dec), sorting entries into the correct half by `**Date:**`.
+- Update the active page's pointer line to reference both halves:
+  ```markdown
+  > Older entries archived in [archive/history-2024-h1.md](archive/history-2024-h1.md), [archive/history-2024-h2.md](archive/history-2024-h2.md), [archive/history-2025.md](archive/history-2025.md).
+  ```
+- If a half-year bucket itself exceeds 150 lines (rare, only for extremely active pages), split further by quarter: `-q1.md`, `-q2.md`, etc.
+- Any topic Timeline wikilinks pointing at the pre-split archive path must be re-targeted — doctor will flag them.
+
 **Topic pages are NOT compacted.** `topics/*.md` pages serve as the canonical narrative across archive boundaries. When an event is moved from `decisions.md` to `archive/decisions-2025.md`, any topic Timeline wikilink that pointed at the original path (e.g., `[[decisions.md#chose-redis]]`) will break — the doctor flags these with a specific recovery hint ("slug matches header in `archive/...` — repoint the wikilink"). This is the expected workflow: compact the event page, then repoint the topic's Timeline entry.
 
 ## Merge Conflict Guidance
@@ -662,6 +794,21 @@ Resolve as follows:
 These are prose pages, not append-only lists. Read both versions, pick the
 more current one, or combine if both changes are valid. When in doubt, keep
 both versions inline and let the next session reconcile.
+
+### Case 4 — Both branches added the same new topic or feature page (add+add)
+
+Two branches independently ran `/brain topic <name>` (or created `features/<name>.md`) with the same slug. Git produces an **add+add file conflict** — the file exists on both sides with different content.
+
+Unlike Case 1 (both sides append within an existing file), this is the file itself being newly created on both sides. Git can't 3-way merge it because there's no common ancestor version of the file.
+
+Resolve:
+1. **Overview section:** read both sides. Combine into one coherent paragraph, preserving both perspectives where they don't contradict. If they contradict (e.g., different Overview framings), pick the one that better matches current project state.
+2. **Timeline section:** concatenate bullets from both sides; sort by `**Date:**` descending; de-duplicate bullets that point at the same wikilink.
+3. **Key Decisions / Related / Current Status:** merge without duplication. If one side has richer content, prefer it.
+4. Set frontmatter `updated:` to the max date across all Timeline bullets in the merged file.
+5. Resolve the conflict in git as a single merged file.
+
+This applies identically to topic pages and feature pages.
 
 ## Platform Integration
 
