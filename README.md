@@ -1,6 +1,8 @@
 # brain
 
-**Per-repo project memory that ships with git.** Every developer who clones the repo inherits full project context. Every LLM coding tool reads it at session start and maintains it as the project evolves.
+**Per-repo project memory that ships with git.** Every developer who clones the repo inherits full project context. Claude Code reads it at session start and maintains it as the project evolves.
+
+> **Status:** Supported on **Claude Code** only. The format (`.brain/` + markdown + wikilinks) is intentionally tool-agnostic, but `/brain` commands and the auto-update hooks require Claude Code. Other-tool support is possible in principle but untested and unsupported today.
 
 > Inspired by Andrej Karpathy's [LLM Wiki](https://gist.github.com/karpathy/1dd0294ef9567971c1e4348a90d69285) pattern — an LLM-maintained knowledge base. brain applies the idea per-repo: instead of a personal wiki, every repository gets a living memory that travels with its code.
 
@@ -157,15 +159,17 @@ If no WHY exists in the conversation, the LLM asks the developer or marks the en
 
 ## Features
 
-### Three installation tiers
+### Three installation tiers (all Claude Code)
 
 | Tier | What you get | How to enable |
 |---|---|---|
-| **1. Zero install** | Any LLM that reads `CLAUDE.md`/`.cursor/rules`/`AGENTS.md` can maintain `.brain/` via the pointer to `SCHEMA.md` | `git clone` a brain-enabled repo |
-| **2. Skill** | 11 `/brain` commands available in Claude Code | `./install.sh` (no flags) |
-| **3. Hooks** | Brain auto-reads on session start + nudges to update after commits | Same installer — hooks included |
+| **1. Zero install** | `CLAUDE.md` points Claude Code at `.brain/SCHEMA.md`; the LLM reads and maintains brain via the format spec | `git clone` a brain-enabled repo |
+| **2. Skill** | 11 `/brain` commands in Claude Code | `./install.sh` (no flags) |
+| **3. Hooks** | Auto-reads on session start + nudges to update after commits | Same installer — hooks included |
 
 Each tier builds on the previous. You can stop at any tier.
+
+The format itself (plain markdown + wikilinks + `SCHEMA.md`) is deliberately tool-agnostic. Any LLM tool that can read a platform instruction file and edit markdown could theoretically participate at Tier 1 — but we haven't tested anything beyond Claude Code, so we don't claim it.
 
 ### Commands (skill tier)
 
@@ -253,10 +257,10 @@ The brain repo uses brain. Clone it, run `/brain query "why topic pages?"`, get 
 
 ## Prerequisites
 
+- **Claude Code** — the only supported LLM tool today
 - **bash** — the installer and hooks are shell scripts
 - **git** — brain is per-repo and ships in git history
 - **jq** — JSON processor used by the installer + both hooks
-- **Claude Code** (or any LLM tool that reads `CLAUDE.md` / `.cursor/rules` / `AGENTS.md`)
 
 **Installing jq:**
 
@@ -336,15 +340,11 @@ git commit -m "brain: captured Redis caching decision"
 
 ## Platform support
 
-brain works with any LLM coding tool that reads a project instruction file. `SCHEMA.md` ships inside `.brain/` with everything the LLM needs; platform files just point to it.
+**Supported:** Claude Code.
 
-| Platform | File | Content |
-|---|---|---|
-| Claude Code | `CLAUDE.md` | "Read `.brain/SCHEMA.md`" |
-| Cursor | `.cursor/rules` | "Read `.brain/SCHEMA.md`" |
-| Codex | `AGENTS.md` | "Read `.brain/SCHEMA.md`" |
+The `SCHEMA.md` format and the `.brain/` directory are deliberately tool-agnostic (plain markdown + wikilinks). `/brain init` will also write a `Project Brain` pointer into `.cursor/rules` or `AGENTS.md` if those files already exist in the repo — a speculative hook for future multi-tool support. We haven't tested brain on Cursor or Codex, so treat those paths as untested.
 
-`/brain init` writes to every existing platform file and creates none that don't exist (respects your tool choice).
+`/brain init` never creates platform instruction files that don't already exist (respects your tool choice).
 
 ---
 
@@ -361,10 +361,10 @@ brain works with any LLM coding tool that reads a project instruction file. `SCH
  │   .brain/topics/*.md     cross-cutting narratives            │
  │   .brain/archive/*.md    compacted old entries                │
  │   .brain/custom/*.md     team-defined pages                  │
- │   CLAUDE.md              points to SCHEMA.md                 │
+ │   CLAUDE.md              points Claude Code at SCHEMA.md     │
  │                                                               │
- │   Any LLM that reads the pointer can maintain brain.         │
- │   Zero install required.                                     │
+ │   Claude Code reads the pointer, maintains brain via the     │
+ │   format spec. Zero install required at this tier.           │
  └──────────────────────────────────────────────────────────────┘
 
  ┌──────────────────────────────────────────────────────────────┐
@@ -397,7 +397,7 @@ For the full architectural doc — every command flow, every hook flow, edge cas
 
 | What | Size | When loaded |
 |---|---|---|
-| SessionStart hook `additionalContext` | ~180 tokens | Every Claude Code session in a brain-enabled repo |
+| SessionStart hook `additionalContext` | ~180 tokens | Every Claude Code session in a brain-enabled repo (Claude Code only) |
 | `index.md` (project overview) | ~400 tokens | Loaded by the LLM at session start (per SCHEMA instructions) |
 | One topic, feature, or event page | ~300–500 tokens | On demand when referenced or queried |
 | `SCHEMA.md` (format rules) | ~10,700 tokens | **Only** when the LLM is updating pages; NOT at session start |
