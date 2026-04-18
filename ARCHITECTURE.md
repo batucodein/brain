@@ -1169,56 +1169,57 @@ A non-exhaustive list of edge cases, each with observed/expected behavior.
 
 ## 10. Issues found (audit)
 
-Consolidated list of all known gaps, bugs, and open architectural questions, with severity and action.
+> **Going forward, open work is tracked in GitHub Issues:** https://github.com/batucodein/brain/issues
+>
+> The tables below are the **origin list** — the audit snapshot that seeded the issue tracker. Each row's link points at the live GitHub issue where discussion, priority, and status are maintained. Future items should be filed directly as issues; they don't need to be added back to this table.
+
+Consolidated list of all known gaps, bugs, and open architectural questions as of 2026-04-18.
 
 ### 10.1 Pre-existing known issues (from the original 15-item backlog)
 
-| # | Issue | Severity | Status |
+| Original # | Issue | Severity | Tracked in |
 |---|-------|----------|--------|
-| 6 | Session compaction loses WHY before `/brain update` runs | Medium | Open. Fix idea: mid-session flush. |
-| 8 | `/brain init` and `install.sh` both write brain block to CLAUDE.md (two locations) | Medium | Open. Pick one canonical. |
-| 9 | No SCHEMA.md version migration path | Low | Open. Hypothetical future problem. |
-| 10 | Compaction has no auto-trigger; user must notice | Low | Open. Doctor could flag threshold. |
-| 11 | Wikilink anchor slug algorithm undefined for special chars (em-dash, backticks, colons) | Medium | Open. Need explicit algorithm in SCHEMA. |
-| 14 | Post-commit hook fires on `git commit --amend` | Medium | Open. Could check `$(git rev-parse HEAD) != $(git rev-parse HEAD@{1})` to detect amend. |
-| 15 | `jq` dependency not preflight-checked | ~~Medium~~ | **Resolved.** Three-layer fix shipped: install.sh preflight (hard error with platform install hints), both hooks degrade to a static JSON WARNING when jq is absent, doctor flags missing jq via Installation invariant. |
+| 6 | Session compaction loses WHY before `/brain update` runs | Medium | [#3](https://github.com/batucodein/brain/issues/3) |
+| 8 | `/brain init` and `install.sh` both write brain block to CLAUDE.md | Medium | [#4](https://github.com/batucodein/brain/issues/4) |
+| 9 | No SCHEMA.md version migration path | Low | [#5](https://github.com/batucodein/brain/issues/5) |
+| 10 | Compaction has no auto-trigger; user must notice | Low | [#6](https://github.com/batucodein/brain/issues/6) |
+| 11 | Wikilink anchor slug undefined for special chars (bundled with N16) | Medium | [#7](https://github.com/batucodein/brain/issues/7) |
+| 14 | Post-commit hook fires on amend / merge / rebase (bundled with N4+N5) | Medium | [#8](https://github.com/batucodein/brain/issues/8) |
+| 15 | `jq` dependency not preflight-checked | ~~Medium~~ | **Resolved** in PR #2 (three-layer fix: install preflight, hook fallback, doctor invariant) |
 
-**Note:** issues #12 (merge conflict magnet), #13 (archive type missing), and #15 (jq preflight) were resolved during this session.
+**Note:** issues #12 (merge conflict magnet), #13 (archive type missing), and #15 (jq preflight) were resolved during the sessions that produced this document.
 
 ### 10.2 New issues surfaced by this architectural audit
 
-| # | Issue | Severity | Notes |
-|---|-------|----------|-------|
-| N1 | `/brain topic` with missing argument — unspecified behavior | Low | Need explicit: "tell user, show usage, stop." |
-| N2 | `/brain topic` slug collision detection missing | Medium | Two topics slugifying to same filename silently overwrite. |
-| N3 | `/brain topic` name with path separators (`/`, `..`) not validated | Low (local-tool, low risk) | Slugify should strip or reject these before `mkdir`/write. |
-| N4 | Post-commit hook fires on merge commits without special handling | Medium | LLM has no session context about the merge; may propose bad updates. Hook should detect `git rev-parse --verify MERGE_HEAD` or check commit's parent count. |
-| N5 | Post-commit hook fires during interactive rebase (amplified) | Medium | Per-commit firing during rebase creates cascading updates. Should detect `GIT_REFLOG_ACTION` or `$(git rev-parse --git-path rebase-merge)` to skip. |
-| N6 | Two concurrent Claude sessions updating `.brain/` create race conditions | Medium | No locking. Last write wins. Rare but possible. |
-| N7 | `updated:` frontmatter can diverge from the max `**Date:**` in entries | Low | Invariant not enforced today. Doctor could add a check. |
-| N8 | Frontmatter `type:` not validated against filename | Low | `bugs.md` with `type: decisions` wouldn't be caught today. |
-| N9 | Two branches adding the same-slug topic page → git add+add conflict not covered in merge guidance | Low | SCHEMA Case 1 assumes file exists in both; new-file-both-sides is different mechanics. |
-| N10 | Archive year-files have no sub-split guidance if they exceed compaction threshold | Low | `archive/history-2024.md` at 200+ entries? SCHEMA silent. |
-| N11 | `custom/*.md` not rendered in dashboard | Low | Known gap. Acceptable for v1 but should be documented. |
-| N12 | `skill/templates/graph.html` is an orphan (exists, not shipped, not referenced) | Trivial | Remove or wire up. |
-| N13 | Brain's own repo has no `.brain/` — tool isn't dogfooded | Medium-philosophical | brain should be able to describe itself. Would also catch many gaps via usage. |
-| N14 | `/brain topic <name> --sync` synonym expansion is LLM-guessed, not codified | Low | Could allow explicit `--sync --keywords "redis,cache,caching"`. |
-| N15 | No enforcement that Timeline wikilinks resolve at write-time | Low | LLM can accidentally write a bullet with broken wikilink; only caught later by doctor. |
-| N16 | SCHEMA.md slug algorithm is prose, not a reference implementation | Medium | Different LLMs may slug differently. Would help to have a canonical JS/py snippet in SCHEMA. |
-| N17 | `install.sh` appends brain block to CLAUDE.md if `# brain` marker is missing, but doesn't check for partial/edited blocks | Low | Edge: user edits the block; install doesn't re-check content. |
-| N18 | `~/.claude/settings.json` hook registration uses `jq` mutation but has no idempotency check beyond `grep -q post-commit-brain` | Low | Could produce duplicate entries if user's settings.json has atypical shape. |
+| Audit # | Issue | Severity | Tracked in |
+|---|-------|----------|-----|
+| N1, N2, N3 | `/brain topic` — missing argument, slug collision, path-traversal (bundled) | Low → Medium | [#9](https://github.com/batucodein/brain/issues/9) |
+| N4, N5 | Post-commit hook on merge / during rebase (bundled with #14) | Medium | [#8](https://github.com/batucodein/brain/issues/8) |
+| N6 | Concurrent Claude sessions race on `.brain/` writes | Medium | [#10](https://github.com/batucodein/brain/issues/10) |
+| N7 | `updated:` frontmatter may diverge from max entry Date | Low | [#11](https://github.com/batucodein/brain/issues/11) |
+| N8 | Frontmatter `type:` not validated against filename | Low | [#12](https://github.com/batucodein/brain/issues/12) |
+| N9 | Two branches adding same-slug topic (add+add) not covered by merge guidance | Low | [#13](https://github.com/batucodein/brain/issues/13) |
+| N10 | Archive year-files have no sub-split guidance | Low | [#14](https://github.com/batucodein/brain/issues/14) |
+| N11 | `custom/*.md` not rendered in dashboard | Low | [#15](https://github.com/batucodein/brain/issues/15) |
+| N12 | `skill/templates/graph.html` orphan | Trivial | [#16](https://github.com/batucodein/brain/issues/16) |
+| N13 | brain doesn't dogfood itself | Medium | [#17](https://github.com/batucodein/brain/issues/17) |
+| N14 | `/brain topic --sync` synonym expansion is LLM-guessed | Low | [#18](https://github.com/batucodein/brain/issues/18) |
+| N15 | No write-time wikilink validation | Low | [#19](https://github.com/batucodein/brain/issues/19) |
+| N16 | SCHEMA slug algorithm is prose, not reference impl (bundled with #11) | Medium | [#7](https://github.com/batucodein/brain/issues/7) |
+| N17 | install.sh CLAUDE.md append — marker-based check only | Low | [#20](https://github.com/batucodein/brain/issues/20) |
+| N18 | Hook settings.json mutation — weak idempotency guard | Low | [#21](https://github.com/batucodein/brain/issues/21) |
 
 ### 10.3 Architectural concerns (not bugs, but drift risk)
 
-| Concern | Implication |
-|---------|-------------|
-| Zero-install tier means the LLM is the enforcer of ALL format rules | Drift is inevitable. Doctor is the only periodic check. |
-| No schema version on individual pages | A page written under SCHEMA v1 can't be identified as such. If v2 breaks a rule, old pages silently violate it. |
-| Slug algorithm in prose, not code | Every LLM is its own implementer. Drift across tools (Claude Code vs Cursor) possible. |
-| Compaction is manual | Pages grow unbounded unless user notices. Dashboard could count; doctor could warn; neither does today. |
-| `features/` vs `topics/` vs `custom/` have overlapping semantics | SCHEMA has a callout table, but users will still get confused. |
-| Topic creation threshold (3+ recurring events) is advisory, not enforced | Some projects will have 0 topics when they should have 5; others will have 50 weak ones. |
-| brain doesn't dogfood itself | Bugs only surface when users report them. Using brain on brain would surface many issues proactively. |
+| Concern | Tracked in |
+|---------|-----|
+| LLM is the sole enforcer of ~95% of format rules (zero-install trade-off) | [#22](https://github.com/batucodein/brain/issues/22) |
+| No schema version on individual pages | [#5](https://github.com/batucodein/brain/issues/5) |
+| Slug algorithm in prose, not code | [#7](https://github.com/batucodein/brain/issues/7) |
+| Compaction is manual | [#6](https://github.com/batucodein/brain/issues/6) |
+| `features/` vs `topics/` vs `custom/` overlap | [#23](https://github.com/batucodein/brain/issues/23) |
+| Topic creation threshold is advisory | (watchlist — no issue yet; observe before deciding) |
+| brain doesn't dogfood itself | [#17](https://github.com/batucodein/brain/issues/17) |
 
 ---
 
