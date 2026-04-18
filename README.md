@@ -48,7 +48,7 @@ Install the skill to get commands for bootstrapping and querying:
 /brain init         Bootstrap .brain/ from existing repo
 /brain query        Search across all pages, follow [[wikilinks]]
 /brain dashboard    Generate interactive HTML dashboard
-/brain health       Check for stale pages, broken links, gaps
+/brain doctor       Full diagnostic: integrity, format, content, sync
 /brain status       Show what's in .brain/ and when pages were last updated
 /brain update       Manually trigger brain update
 /brain decide       Quick-add a decision
@@ -91,8 +91,9 @@ Restart your Claude Code session after installing.
 /brain status       Show what's in .brain/ and when pages were last updated
 /brain update       Review session changes and update relevant pages
 /brain query "X"    Ask a question — searches across all pages, follows [[wikilinks]]
-/brain health       Check for stale pages, broken links, compaction needed
 /brain dashboard    Generate interactive dashboard of all entries
+/brain doctor       Full diagnostic: integrity, format, content quality, sync (--dry-run to diagnose only, skip fixes)
+/brain uninstall    Remove brain from this machine (keeps .brain/ in repos)
 ```
 
 ### Quick Commands
@@ -214,7 +215,7 @@ brain works with any LLM coding tool. `SCHEMA.md` ships inside `.brain/` and con
 │  ~/.claude/hooks/                 ← Auto-update hooks  │
 │  ~/.claude/settings.json          ← Hook registration  │
 │                                                       │
-│  Adds: /brain init, query, dashboard, health          │
+│  Adds: /brain init, query, dashboard, doctor          │
 │  Adds: Auto-read on session start                     │
 │  Adds: Auto-update check after every commit           │
 └──────────────────────────────────────────────────────┘

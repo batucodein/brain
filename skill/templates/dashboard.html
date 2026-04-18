@@ -361,6 +361,10 @@
         <span class="nav-dot" style="background: #3B82F6"></span>Features
         <span class="nav-count" data-count="feature"></span>
       </a></li>
+      <li><a href="#topics">
+        <span class="nav-dot" style="background: #14B8A6"></span>Topics
+        <span class="nav-count" data-count="topic"></span>
+      </a></li>
       <li><a href="#bugs">
         <span class="nav-dot" style="background: #EF4444"></span>Bugs
         <span class="nav-count" data-count="bug"></span>
@@ -383,6 +387,7 @@ const BRAIN_DATA = {{BRAIN_JSON}};
 
 const TYPE_COLORS = {
   feature: '#3B82F6',
+  topic: '#14B8A6',
   decision: '#10B981',
   bug: '#EF4444',
   history: '#8B5CF6',
@@ -439,12 +444,24 @@ function renderEntryCards(entries, type, title) {
     return html;
   }
 
-  entries.forEach(entry => {
+  // Validate and sort entries by date, newest first (D5, D6)
+  const isValidDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+  const sortedEntries = [...entries].sort((a, b) => {
+    const aValid = isValidDate(a.date);
+    const bValid = isValidDate(b.date);
+    if (!aValid && !bValid) return 0;
+    if (!aValid) return 1;   // undated/invalid to bottom
+    if (!bValid) return -1;
+    return b.date.localeCompare(a.date);  // newest first (YYYY-MM-DD string compare works)
+  });
+
+  sortedEntries.forEach(entry => {
     html += `<div class="card timeline-dot" style="--dot-color: ${color}" data-searchable="${escapeHtml((entry.title + ' ' + (entry.content || '') + ' ' + (entry.context || '')).toLowerCase())}">`;
     html += '<div class="card-top">';
     html += `<span class="card-title">${escapeHtml(entry.title)}</span>`;
     if (entry.date) {
-      html += `<span class="card-date">${escapeHtml(entry.date)}</span>`;
+      const dateDisplay = isValidDate(entry.date) ? entry.date : '⚠ invalid date';
+      html += `<span class="card-date">${escapeHtml(dateDisplay)}</span>`;
     }
     html += '</div>';
 
@@ -507,6 +524,45 @@ function renderPatterns() {
   return html;
 }
 
+function renderTopicCards() {
+  const topics = BRAIN_DATA.topics || [];
+  const color = TYPE_COLORS.topic;
+
+  let html = '<div class="section" id="topics">';
+  html += `<div class="section-header"><span class="section-dot" style="background: ${color}"></span>`;
+  html += '<span class="section-title">Topics</span></div>';
+
+  if (topics.length === 0) {
+    html += '<div class="empty-state">No topic pages yet. Create one with <code>/brain topic &lt;name&gt;</code> when a domain deserves synthesis.</div></div>';
+    return html;
+  }
+
+  topics.forEach(t => {
+    const title = escapeHtml(t.title || t.slug || 'Untitled');
+    const overview = escapeHtml(t.overview || '');
+    const updated = escapeHtml(t.updated || '');
+    const tCount = t.timelineCount || 0;
+    const rCount = t.relatedCount || 0;
+    const href = `topics/${encodeURIComponent(t.slug)}.md`;
+    const searchable = escapeHtml((title + ' ' + overview).toLowerCase());
+
+    html += `<div class="card" data-searchable="${searchable}">`;
+    html += `<div class="card-top">`;
+    html += `<span class="card-title"><a href="${href}" style="color:inherit;text-decoration:none">${title}</a></span>`;
+    if (updated) html += `<span class="card-date">${updated}</span>`;
+    html += `</div>`;
+    if (overview) html += `<div class="card-content">${overview}</div>`;
+    html += `<div class="card-meta">`;
+    html += `<span class="card-tag">${tCount} timeline ${tCount === 1 ? 'entry' : 'entries'}</span>`;
+    html += `<span class="card-tag">${rCount} related ${rCount === 1 ? 'link' : 'links'}</span>`;
+    html += `</div>`;
+    html += '</div>';
+  });
+
+  html += '</div>';
+  return html;
+}
+
 function renderArchitecture() {
   const arch = BRAIN_DATA.architecture || {};
   const color = TYPE_COLORS.architecture;
@@ -543,15 +599,23 @@ allHtml += renderOverview();
 allHtml += renderEntryCards(BRAIN_DATA.history || [], 'history', 'History');
 allHtml += renderEntryCards(BRAIN_DATA.decisions || [], 'decision', 'Decisions');
 allHtml += renderEntryCards(BRAIN_DATA.features || [], 'feature', 'Features');
+allHtml += renderTopicCards();
 allHtml += renderEntryCards(BRAIN_DATA.bugs || [], 'bug', 'Bugs');
 allHtml += renderPatterns();
 allHtml += renderArchitecture();
 content.innerHTML = allHtml;
 
 // Update sidebar counts
+const COUNT_KEYS = {
+  decision: 'decisions',
+  bug: 'bugs',
+  feature: 'features',
+  topic: 'topics'
+};
 document.querySelectorAll('[data-count]').forEach(el => {
   const type = el.dataset.count;
-  const count = (BRAIN_DATA[type === 'decision' ? 'decisions' : type === 'bug' ? 'bugs' : type === 'feature' ? 'features' : type] || []).length;
+  const key = COUNT_KEYS[type] || type;
+  const count = (BRAIN_DATA[key] || []).length;
   el.textContent = count || '';
 });
 
