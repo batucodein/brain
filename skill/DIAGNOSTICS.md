@@ -84,14 +84,34 @@ not duplicate it.
   `updated:`. *(SCHEMA.md § Frontmatter Fields)*
 - `type:` is one of the valid values: `index, architecture, decisions, patterns,
   history, bugs, feature, topic, custom, archive`. *(SCHEMA.md § Page Types)*
+- **`type:` matches the file's expected location.** Each path maps to a canonical
+  type: `decisions.md` → `decisions`, `bugs.md` → `bugs`, `history.md` → `history`,
+  `index.md` → `index`, `architecture.md` → `architecture`, `patterns.md` → `patterns`,
+  `features/*.md` → `feature`, `topics/*.md` → `topic`, `custom/*.md` → `custom`,
+  `archive/*.md` → `archive`. Mismatch → ERROR.
+  *(SCHEMA.md § Page Types)*
 
 ### Content invariants
 
 - Every `**Date:** <v>` line matches `^\d{4}-\d{2}-\d{2}$`. *(SCHEMA.md § Date Format)*
 - Every frontmatter `updated:` matches the same regex. *(SCHEMA.md § Date Format)*
-- Every `[[target]]` wikilink resolves — file exists, and for `[[page.md#anchor]]`,
-  a `##`/`###` header slugifies to the anchor (lowercase, spaces→dashes, punctuation stripped).
-  *(SCHEMA.md § Linking with wikilinks + § Anchor Format)*
+- **`updated:` reflects latest content.** For event-type pages (`decisions.md`, `bugs.md`,
+  `history.md`) and Timeline-bearing pages (`features/*.md`, `topics/*.md`), compute the
+  max `**Date:**` across all entries/Timeline bullets. If the page's frontmatter `updated:`
+  is OLDER than that max, flag as WARNING: "updated: X is older than latest entry date Y —
+  the page was likely modified without bumping updated". Reason not ERROR: occasionally
+  the user deliberately preserves an old `updated:` after a trivial fix.
+  *(SCHEMA.md § Date Format + § Updating)*
+- **Compaction threshold.** For `decisions.md`, `bugs.md`, `history.md`, and any
+  `archive/<page>-<year>.md`: count `## ` top-level entries. If count ≥ 30 OR the file
+  has ≥ 150 lines, flag as WARNING: "<page> is at compaction threshold (N entries, L lines)
+  — consider compacting per SCHEMA.md § Compaction". Soft warning, not ERROR: compaction is
+  user judgment. *(SCHEMA.md § Compaction)*
+- Every `[[target]]` wikilink resolves — file exists, and for `[[page.md#anchor]]`, a
+  `##`/`###` header in the target file produces the same slug when run through the
+  algorithm at SCHEMA.md § Anchor Slug Algorithm (lowercase, preserve Unicode letters,
+  delete punctuation, whitespace→single hyphen, collapse hyphens, trim).
+  *(SCHEMA.md § Linking with wikilinks + § Anchor Slug Algorithm)*
   - **Before flagging a broken `[[page.md#anchor]]` as MANUAL**, search all `.brain/archive/*.md`
     files for a header whose slug matches `#anchor`. If found, the finding message becomes:
     *"Broken wikilink — slug matches header in `archive/<file>.md`. Content was likely compacted.
