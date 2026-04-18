@@ -1,92 +1,280 @@
 # brain
 
-Per-repo project memory that ships with git. Every developer who clones the repo gets full project context. Every LLM coding tool reads it at session start and updates it as the project evolves.
+**Per-repo project memory that ships with git.** Every developer who clones the repo inherits full project context. Every LLM coding tool reads it at session start and maintains it as the project evolves.
 
-> Inspired by Andrej Karpathy's [LLM Wiki](https://gist.github.com/karpathy/1dd0294ef9567971c1e4348a90d69285) — an LLM-maintained personal knowledge base. brain takes the idea and applies it per-repo: instead of a personal wiki, every repository gets its own living memory that travels with the code.
+> Inspired by Andrej Karpathy's [LLM Wiki](https://gist.github.com/karpathy/1dd0294ef9567971c1e4348a90d69285) pattern — an LLM-maintained knowledge base. brain applies the idea per-repo: instead of a personal wiki, every repository gets a living memory that travels with its code.
 
-```
-.brain/
-├── SCHEMA.md             LLM instructions + format rules (the brain of the brain)
-├── index.md              What this project does, tech stack, team
-├── architecture.md       System structure, components, data flow
-├── decisions.md          Why things are the way they are
-├── patterns.md           Coding conventions and team practices
-├── history.md            Timeline of significant changes
-├── bugs.md               Notable bugs with root cause analysis
-└── features/             One page per significant feature
-    └── webhook-delivery.md
-```
+---
 
-## Why
+## The problem brain solves
 
-Your codebase has a README that tells people what to install. Git history tells people what changed. But nobody records **why** things were built the way they were.
+Your codebase has:
 
-Three months later, a developer asks "why is auth custom instead of using a library?" and the answer is buried in a Slack thread that got deleted, or in the head of someone who left.
+- A **README** that tells people what to install and how to run it
+- **Git history** that tells people what changed line-by-line
+- **No place** for the *why*
 
-`.brain/` captures the WHY and keeps it next to the code, in git, forever.
+Three months later, a developer asks *"why is auth custom instead of using a library?"* and the answer is buried in a Slack thread that got deleted, or in the head of someone who left.
 
-## How It Works
+brain captures the **WHY** and keeps it next to the code, in git, forever. Any LLM that reads your repo can answer questions about decisions, bugs, architectural shifts — without archaeology.
 
-brain has three tiers — each builds on the previous:
+---
 
-### Tier 1: Zero Install (just clone)
+## A concrete example
 
-Any repo with `.brain/` works out of the box. No install needed.
+**January** — Dev A builds webhook delivery:
 
-1. Developer clones a repo that has `.brain/`
-2. `CLAUDE.md` (or `.cursor/rules`, `AGENTS.md`) tells the LLM to read `.brain/SCHEMA.md`
-3. `SCHEMA.md` contains everything: session behavior, update process, format rules
-4. The LLM reads brain pages, tracks reasoning during the session, updates pages after significant changes
-
-**Nothing to install. Nothing to configure. Just git clone and work.**
-
-### Tier 2: Power Commands (`/brain` skill)
-
-Install the skill to get commands for bootstrapping and querying:
-
-```
-/brain init         Bootstrap .brain/ from existing repo
-/brain query        Search across all pages, follow [[wikilinks]]
-/brain dashboard    Generate interactive HTML dashboard
-/brain doctor       Full diagnostic: integrity, format, content, sync
-/brain status       Show what's in .brain/ and when pages were last updated
-/brain update       Manually trigger brain update
-/brain decide       Quick-add a decision
-/brain bug          Quick-add a bug
-/brain history      Quick-add a history entry
+```markdown
+# features/webhook-delivery.md
+## Timeline
+- **2026-01-15** — Initial implementation. Async delivery via Redis queue.
+  See [[decisions.md#chose-redis-queue-for-webhooks]].
 ```
 
-### Tier 3: Auto-Update (hooks)
+**May** — Dev B fixes a race condition:
 
-Install hooks for fully automatic brain maintenance:
+```markdown
+# bugs.md
+## Race condition in webhook delivery
+**Date:** 2026-05-18
+**Root cause:** Shared slice in worker without mutex.
+**Fix:** Per-batch channel. PR #142.
+**Feature:** [[features/webhook-delivery.md]]
+```
 
-- **Session start**: LLM automatically reads `.brain/` for project context
-- **After every commit**: LLM checks the conversation for brain-worthy changes and updates pages if needed
+The feature page auto-updates with a Timeline entry linking to the bug.
 
-The developer just works. Brain maintains itself.
+**September** — Dev C asks *"what's the story with webhook delivery?"*
+
+The LLM reads `features/webhook-delivery.md`, follows the `[[wikilinks]]` to the original decision and the bug fix, and answers:
+
+> Webhook delivery was built in January using a Redis queue (chosen over RabbitMQ for operational simplicity). In May, a race condition — shared slice in the worker — was fixed with per-batch channels. It currently handles ~2k deliveries/min.
+
+Full story. Three developers. Nine months. Zero Slack archaeology.
+
+---
+
+## Directory layout
+
+```
+ .brain/
+ ├── SCHEMA.md          authoritative format rules; shipped per-repo
+ ├── index.md           project overview (what, tech stack, team)
+ ├── architecture.md    system structure, components, data flow
+ ├── decisions.md       why things were built this way (append-only)
+ ├── patterns.md        coding conventions, error handling, testing
+ ├── history.md         timeline of significant changes
+ ├── bugs.md            notable bugs with root cause + fix
+ ├── features/          one page per feature — full lifecycle
+ │   └── webhook-delivery.md
+ ├── topics/            cross-cutting narratives (subsystems, concepts)
+ │   ├── redis.md
+ │   └── auth.md
+ ├── archive/           compacted old entries (still searchable)
+ │   └── history-2024.md
+ └── custom/            team-defined pages (onboarding, runbooks)
+     └── oncall.md
+```
+
+---
+
+## How it works
+
+brain runs on three layers:
+
+### 1. The graph (markdown + wikilinks)
+
+Every page can reference any other via `[[wikilinks]]`:
+
+```
+ [[decisions.md#chose-redis]]        link to a specific entry
+ [[features/auth.md]]                link to a feature's lifecycle
+ [[topics/redis.md]]                 link to a cross-cutting narrative
+ [[archive/decisions-2024.md#x]]     link to compacted content
+```
+
+There's no database, no embedding index, no vector search. Just markdown links the LLM reads and follows. Any human can open a file and see the connections.
+
+### 2. The write loop (how knowledge enters brain)
+
+```
+ User writes code ──► git commit
+                         │
+                         ▼
+                 post-commit hook fires
+                         │
+                         ├── amend/merge/rebase/revert → skip
+                         │
+                         └── normal commit → nudge the LLM
+                         │
+                         ▼
+                 LLM runs /brain update
+                         │
+                         ▼
+                 Watch for 5 event types (the "WHY"):
+                   1. A CHOICE was made (alternatives weighed)
+                   2. Something BROKE and was understood
+                   3. Something was REJECTED
+                   4. A CONSTRAINT shaped the work
+                   5. The system changed STRUCTURALLY
+                         │
+                         ▼
+                 Filter trivia (formatting, version bumps, renames)
+                         │
+                         ▼
+                 Categorize → extract WHY → write entries + wikilinks
+                         │
+                         ▼
+                 git commit .brain/
+```
+
+If no WHY exists in the conversation, the LLM asks the developer or marks the entry for later. **It never invents reasoning.**
+
+### 3. The read loop (how brain answers questions)
+
+```
+ User asks something
+      │
+      ▼
+ LLM already has baseline context from SessionStart hook:
+   • knows .brain/ exists
+   • knows topic page names
+      │
+      ▼
+ Grep for keywords (includes archive/) → rank matches
+      │
+      ▼
+ Read the top 3-5 pages, follow [[wikilinks]] one level deep
+      │
+      ▼
+ If a wikilink doesn't resolve → check archive/ for the slug
+      │
+      ▼
+ Synthesize chronological answer with citations
+```
+
+---
+
+## Features
+
+### Three installation tiers
+
+| Tier | What you get | How to enable |
+|---|---|---|
+| **1. Zero install** | Any LLM that reads `CLAUDE.md`/`.cursor/rules`/`AGENTS.md` can maintain `.brain/` via the pointer to `SCHEMA.md` | `git clone` a brain-enabled repo |
+| **2. Skill** | 11 `/brain` commands available in Claude Code | `./install.sh` (no flags) |
+| **3. Hooks** | Brain auto-reads on session start + nudges to update after commits | Same installer — hooks included |
+
+Each tier builds on the previous. You can stop at any tier.
+
+### Commands (skill tier)
+
+| Command | What it does |
+|---|---|
+| `/brain` | Auto-detect: `init` if no `.brain/`, otherwise `status` |
+| `/brain init` | Bootstrap `.brain/` from an existing repo by analyzing the code |
+| `/brain status` | Show what's in `.brain/` and when pages were last updated |
+| `/brain update` | Manually trigger a brain update for the current session |
+| `/brain decide "<text>"` | Quick-add an architectural decision |
+| `/brain bug "<text>"` | Quick-add a notable bug |
+| `/brain history "<text>"` | Quick-add a history entry |
+| `/brain topic <name>` | Create or sync a topic page (cross-cutting narrative) |
+| `/brain query "<question>"` | Search all pages, follow `[[wikilinks]]`, synthesize answer |
+| `/brain dashboard` | Generate an interactive HTML dashboard |
+| `/brain doctor` | Diagnose integrity, format, and content (with `--dry-run`) |
+| `/brain uninstall` | Remove brain skill + hooks from the machine (keeps `.brain/` in repos) |
+
+### Topic pages — the synthesis layer
+
+Event-type pages (decisions/bugs/history) are sliced by *what kind of event*. Topic pages are sliced by *domain*:
+
+```
+ Without topics:
+   Redis story = grep across decisions.md + bugs.md + history.md + features/
+   + stitching together manually
+
+ With topics:
+   Redis story = read topics/redis.md
+                 follow the 7 Timeline wikilinks
+                 full narrative emerges in order
+```
+
+Topic creation is **explicit** (`/brain topic redis`). The LLM never auto-creates topic pages — that prevents weak, sticky topics. Maintenance is automatic: `/brain update` appends Timeline bullets to matching topics.
+
+### Archive — cold storage with zero token tax
+
+Brain pages grow forever. Compaction moves entries older than 3 months to `.brain/archive/<page>-<year>.md`:
+
+- Active pages stay small → cheap at session start
+- Archives stay in git → still searchable, still in history
+- The LLM reaches for archive on demand (via `/brain query`, wikilink fallback, or organic questions about old events)
+
+Topic Timelines can point into archive. Doctor detects compacted links and suggests repointing.
+
+### Dashboard
+
+`/brain dashboard` generates a standalone HTML file with:
+
+- **Sidebar nav:** Overview, History, Decisions, Features, Topics, Custom, Bugs, Patterns, Architecture
+- **Entry cards** sorted by date, color-coded by type
+- **Real-time search** across all entries
+- **Works offline** — no server, no JS framework
+
+Opens in your browser; dark theme (#0A0E27).
+
+### Doctor — integrity catcher
+
+`/brain doctor` reads `SCHEMA.md` + a skill-local playbook at runtime and walks these invariants:
+
+- Structural: core pages exist, frontmatter valid, `type:` matches filename
+- Content: dates valid, `updated:` matches latest entry, wikilinks resolve (with archive-slug recovery)
+- Compaction: flag pages past the threshold
+- Installation: hooks registered, `jq` available
+- Git: `.brain/` tracked, not gitignored
+
+Auto-fixes are whitelisted to exactly two mechanical operations (restore `SCHEMA.md`, re-register hooks). Everything else is reported for the user.
+
+### Deterministic slug algorithm
+
+Every `## Header` produces the same anchor across every LLM and tool. `[[page.md#anchor]]` resolves identically in Claude Code, Cursor, Codex. Specified in SCHEMA with a Python reference implementation + worked examples.
+
+### Hooks — the reliability layer
+
+Two shell scripts wire into Claude Code:
+
+- **SessionStart hook:** every Claude session that opens in a brain-enabled repo sees `.brain/` exists + topic page names (~180 tokens every session). Content is read on demand, never pre-loaded.
+- **Post-commit hook:** after `git commit*`, nudges the LLM to check for brain-worthy changes. Skips amend, merge, rebase, cherry-pick, and revert commits (no session context to capture).
+
+### Self-documenting (brain dogfoods itself)
+
+The brain repo uses brain. Clone it, run `/brain query "why topic pages?"`, get a real synthesized answer. The `.brain/` in this repo is a working example of well-maintained brain content.
+
+---
 
 ## Prerequisites
 
-- **bash** — runs the installer and hooks
-- **git** — brain is per-repo and ships with git history
-- **jq** — JSON processor used to register hooks in `~/.claude/settings.json` and by both hook scripts at runtime
-- **Claude Code** (or any LLM coding tool that reads `CLAUDE.md` / `.cursor/rules` / `AGENTS.md`)
+- **bash** — the installer and hooks are shell scripts
+- **git** — brain is per-repo and ships in git history
+- **jq** — JSON processor used by the installer + both hooks
+- **Claude Code** (or any LLM tool that reads `CLAUDE.md` / `.cursor/rules` / `AGENTS.md`)
 
 **Installing jq:**
 
 | Platform | Command |
-|---------|---------|
+|---|---|
 | macOS | `brew install jq` |
 | Debian / Ubuntu | `sudo apt install jq` |
 | Fedora / RHEL | `sudo dnf install jq` |
 | Arch | `sudo pacman -S jq` |
 | Other | see [jqlang.org/download](https://jqlang.org/download/) |
 
-The installer detects missing jq and offers to install it for you if a supported package manager is available (macOS+brew, Debian+apt, Fedora+dnf, Arch+pacman). Otherwise it prints these instructions and exits.
+The installer detects missing jq and offers to install it for you if a supported package manager is available. Otherwise it prints instructions and exits cleanly — no partial installs.
+
+---
 
 ## Install
 
-**One-liner (installs skill + hooks):**
+**One-liner (skill + hooks):**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/batucodein/brain/main/install.sh | bash
@@ -100,164 +288,137 @@ cd brain
 ./install.sh
 ```
 
+**Refresh hooks only** (if `/brain doctor` reports hooks missing or unregistered):
+
+```bash
+~/.claude/skills/brain/install.sh --hooks-only
+```
+
 Restart your Claude Code session after installing.
 
-## Usage
+---
 
-```
-/brain              Auto-detect: init if no .brain/, otherwise show status
-/brain init         Bootstrap .brain/ from existing repo
-/brain status       Show what's in .brain/ and when pages were last updated
-/brain update       Review session changes and update relevant pages
-/brain query "X"    Ask a question — searches across all pages, follows [[wikilinks]]
-/brain dashboard    Generate interactive dashboard of all entries
-/brain doctor       Full diagnostic: integrity, format, content quality, sync (--dry-run to diagnose only, skip fixes)
-/brain uninstall    Remove brain from this machine (keeps .brain/ in repos)
-```
+## Quick commands
 
-### Quick Commands
+Record something without walking through `/brain update`:
 
-```
+```bash
 /brain decide "Chose Redis over Memcached — need pub/sub for cache invalidation"
 /brain bug "Race condition in webhook worker — shared slice without mutex"
 /brain history "Migrated CI from CircleCI to GitHub Actions"
+/brain topic redis               # create topic page
+/brain topic redis --sync        # backfill Timeline from existing entries
 ```
 
-## The WHY Problem
+All quick-adds run a same-day duplicate check + category-mismatch check before inserting. Both fold into one y/N prompt — no double-prompting.
 
-brain captures reasoning through 5 event types that the LLM tracks during every session:
+---
 
-1. **A choice was made** — Multiple approaches existed, one was picked
-2. **Something broke and was understood** — Bug reported, investigated, root cause found
-3. **Something was rejected** — An approach was proposed and turned down
-4. **A constraint shaped the work** — Performance, cost, time, compatibility steered the implementation
-5. **The system changed structurally** — New component, integration, or dependency
+## Git conventions
 
-After each commit, the LLM checks if any of these happened and updates the relevant brain pages. If no WHY exists in the conversation, it asks the developer or marks the entry for later.
-
-## Example: The 3-Developer Story
-
-This is the scenario brain is built for.
-
-**January — Dev A builds webhook delivery:**
-
-```markdown
-# features/webhook-delivery.md
-
-## Timeline
-- **2026-01-15** — Initial implementation. Async delivery via Redis queue.
-  See [[decisions.md#chose-redis-queue-for-webhooks]].
-```
-
-**May — Dev B fixes a race condition:**
-
-```markdown
-# bugs.md
-
-## Race condition in webhook delivery
-**Date:** 2026-05-18
-**Root cause:** Shared slice in worker without mutex.
-**Fix:** Per-batch channel. PR #142.
-**Feature:** [[features/webhook-delivery.md]]
-```
-
-The feature page gets updated too:
-
-```markdown
-# features/webhook-delivery.md (updated)
-
-## Timeline
-- **2026-01-15** — Initial implementation. See [[decisions.md#chose-redis-queue-for-webhooks]].
-- **2026-05-18** — Fixed race condition. See [[bugs.md#race-condition-in-webhook-delivery]].
-```
-
-**September — Dev C asks: "What's the story of webhook delivery?"**
-
-The LLM reads `features/webhook-delivery.md`, follows the `[[wikilinks]]` to the original decision and the bug fix, and answers:
-
-> Webhook delivery was built in January using a Redis queue (chosen over RabbitMQ for simplicity). In May, a race condition was found — shared slice in the worker — and fixed with per-batch channels. It currently handles ~2k deliveries/min.
-
-Full story. Three developers. Nine months. Zero Slack archaeology.
-
-## Git Conventions
-
-Brain updates are included in the same commit as the code they describe:
+Brain updates ship in the same commit as the code they describe:
 
 ```bash
 git add .brain/ src/
 git commit -m "feat: add Redis caching layer"
 ```
 
-One change = one commit. The LLM updates brain pages before committing, then stages everything together. No separate commits, no special prefixes.
+One change = one commit. The LLM updates brain pages before committing, then stages everything together.
 
-## Dashboard
+When the post-commit hook triggers an update *after* the code commit (you forgot, or the LLM caught it retroactively), brain makes a separate commit with the `brain:` prefix:
 
-`/brain dashboard` generates a standalone HTML dashboard showing all brain entries organized by category, sorted chronologically. No server needed — opens in your browser.
+```bash
+git add .brain/
+git commit -m "brain: captured Redis caching decision"
+```
 
-- **Sidebar navigation** — Jump between Overview, History, Decisions, Features, Bugs, Patterns, Architecture
-- **Chronological ordering** — Every entry sorted by date within its category
-- **Search** — Filter all entries in real-time
-- **Date badges** — Every entry shows its `YYYY-MM-DD` date
-- **Context tags** — Decisions show context and status, bugs show symptom/root cause/fix
+---
 
-Dark theme (background #0A0E27) with color-coded sections matching the brain type system.
+## Platform support
 
-## Platform Support
+brain works with any LLM coding tool that reads a project instruction file. `SCHEMA.md` ships inside `.brain/` with everything the LLM needs; platform files just point to it.
 
-brain works with any LLM coding tool. `SCHEMA.md` ships inside `.brain/` and contains everything the LLM needs. Platform-specific files just point to it:
+| Platform | File | Content |
+|---|---|---|
+| Claude Code | `CLAUDE.md` | "Read `.brain/SCHEMA.md`" |
+| Cursor | `.cursor/rules` | "Read `.brain/SCHEMA.md`" |
+| Codex | `AGENTS.md` | "Read `.brain/SCHEMA.md`" |
 
-| Platform     | File              | What it says |
-|-------------|-------------------|--------------|
-| Claude Code | `CLAUDE.md`       | Read `.brain/SCHEMA.md` |
-| Cursor      | `.cursor/rules`   | Read `.brain/SCHEMA.md` |
-| Codex       | `AGENTS.md`       | Read `.brain/SCHEMA.md` |
+`/brain init` writes to every existing platform file and creates none that don't exist (respects your tool choice).
+
+---
 
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────┐
-│                   In the repo (git)                   │
-│                                                       │
-│  .brain/SCHEMA.md    ← LLM instructions + format     │
-│  .brain/index.md     ← Project overview               │
-│  .brain/*.md         ← Brain pages                    │
-│  CLAUDE.md           ← Points to SCHEMA.md            │
-│                                                       │
-│  Any LLM that reads CLAUDE.md can maintain brain.     │
-│  Zero install required.                               │
-└──────────────────────────────────────────────────────┘
+ ┌──────────────────────────────────────────────────────────────┐
+ │                     Tier 1 — in the repo (git)                │
+ │                                                               │
+ │   .brain/SCHEMA.md       authoritative format rules          │
+ │   .brain/index.md        project overview                    │
+ │   .brain/{decisions,bugs,history}.md   event logs            │
+ │   .brain/features/*.md   per-feature lifecycles              │
+ │   .brain/topics/*.md     cross-cutting narratives            │
+ │   .brain/archive/*.md    compacted old entries                │
+ │   .brain/custom/*.md     team-defined pages                  │
+ │   CLAUDE.md              points to SCHEMA.md                 │
+ │                                                               │
+ │   Any LLM that reads the pointer can maintain brain.         │
+ │   Zero install required.                                     │
+ └──────────────────────────────────────────────────────────────┘
 
-┌──────────────────────────────────────────────────────┐
-│               Local install (optional)                │
-│                                                       │
-│  ~/.claude/skills/brain/SKILL.md  ← /brain commands   │
-│  ~/.claude/hooks/                 ← Auto-update hooks  │
-│  ~/.claude/settings.json          ← Hook registration  │
-│                                                       │
-│  Adds: /brain init, query, dashboard, doctor          │
-│  Adds: Auto-read on session start                     │
-│  Adds: Auto-update check after every commit           │
-└──────────────────────────────────────────────────────┘
+ ┌──────────────────────────────────────────────────────────────┐
+ │            Tier 2 — skill (per-user, optional)               │
+ │                                                               │
+ │   ~/.claude/skills/brain/SKILL.md       /brain command specs │
+ │   ~/.claude/skills/brain/SCHEMA.md      canonical format     │
+ │   ~/.claude/skills/brain/DIAGNOSTICS.md doctor playbook      │
+ │   ~/.claude/skills/brain/templates/     page starter templates│
+ │                                                               │
+ │   Enables: all 11 /brain commands                             │
+ └──────────────────────────────────────────────────────────────┘
+
+ ┌──────────────────────────────────────────────────────────────┐
+ │            Tier 3 — hooks (per-user, optional)                │
+ │                                                               │
+ │   ~/.claude/hooks/session-start-brain.sh   discovery          │
+ │   ~/.claude/hooks/post-commit-brain.sh     write trigger      │
+ │   ~/.claude/settings.json                  registration       │
+ │                                                               │
+ │   Enables: auto-read on session start, auto-update nudge     │
+ └──────────────────────────────────────────────────────────────┘
 ```
 
-## Token & Storage Cost
+For the full architectural doc — every command flow, every hook flow, edge cases, integrity analysis — see [ARCHITECTURE.md](ARCHITECTURE.md).
+
+---
+
+## Token & storage cost
 
 | What | Size | When loaded |
-|------|------|-------------|
-| SCHEMA.md (LLM instructions) | ~1,200 tokens | Session start |
-| index.md (project overview) | ~400 tokens | Session start |
-| All brain pages | ~2,200 tokens | On demand |
-| Full .brain/ on disk | ~15 KB | Always in git |
+|---|---|---|
+| SessionStart hook `additionalContext` | ~180 tokens | Every Claude Code session in a brain-enabled repo |
+| `index.md` (project overview) | ~400 tokens | Loaded by the LLM at session start (per SCHEMA instructions) |
+| One topic, feature, or event page | ~300–500 tokens | On demand when referenced or queried |
+| `SCHEMA.md` (format rules) | ~10,700 tokens | **Only** when the LLM is updating pages; NOT at session start |
+| `DIAGNOSTICS.md` (doctor playbook) | ~4,200 tokens | **Only** when `/brain doctor` runs |
+| Full `.brain/` on disk | ~15 KB minimum | Always in git |
 
-For context, a single medium source file is 3,000+ tokens. brain's overhead is negligible.
+Session-start cost is low (~580 tokens total including `index.md`). A single medium source file costs 3,000+ tokens — brain's overhead is negligible for the value it delivers.
+
+---
 
 ## Schema
 
-See [SCHEMA.md](skill/SCHEMA.md) for the full format specification — LLM instructions, page types, frontmatter fields, `[[wikilink]]` syntax, update rules, compaction strategy, and merge conflict guidance.
+See [skill/SCHEMA.md](skill/SCHEMA.md) for the full format specification — LLM instructions, the 5 event types, page types, frontmatter fields, `[[wikilink]]` syntax and anchor slug algorithm, update rules, compaction strategy, merge conflict guidance (4 cases), decision supersession, and feature removal conventions.
+
+---
 
 ## Inspiration
 
-This project is inspired by Andrej Karpathy's [LLM Wiki](https://gist.github.com/karpathy/1dd0294ef9567971c1e4348a90d69285) pattern — an LLM that maintains a personal knowledge base through an ingest → compile → query → lint cycle. brain adapts this for collaborative software development: instead of one person's wiki, it's a shared project memory that every team member's LLM reads and writes to.
+Inspired by Andrej Karpathy's [LLM Wiki](https://gist.github.com/karpathy/1dd0294ef9567971c1e4348a90d69285) pattern — an LLM that maintains a personal knowledge base through an ingest → compile → query → lint cycle. brain adapts this for collaborative software development: instead of one person's wiki, it's a shared project memory that every team member's LLM reads and writes to.
+
+---
 
 ## License
 
