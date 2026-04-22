@@ -1,9 +1,13 @@
 ---
 type: history
-updated: 2026-04-18
+updated: 2026-04-22
 ---
 
 # History
+
+## Added /brain topic --sync-all for bulk topic refresh
+**Date:** 2026-04-22
+New invocation mode on `/brain topic`: `--sync-all` refreshes every existing topic in one pass. Closes the gap where users doing bulk manual `/brain decide/bug/history` adds had to run `/brain topic <name> --sync` per topic to propagate. Implementation reads event pages ONCE into working context and filters per-topic from cache, making it ~N× cheaper than looping the per-topic command. Grouped `a/s/q` approval prompt avoids mass-approval fatigue. `--keywords` is intentionally unsupported in bulk mode (each topic uses its own inferred synonyms). Commit `f3dde67`. See [[decisions.md#bulk-topic-sync-reads-event-pages-once-not-per-topic]], [[features/topic-pages.md]].
 
 ## README scoped down — Claude Code only, format stays tool-agnostic
 **Date:** 2026-04-19

@@ -1,9 +1,22 @@
 ---
 type: decisions
-updated: 2026-04-18
+updated: 2026-04-22
 ---
 
 # Decisions
+
+## Bulk topic sync reads event pages ONCE, not per-topic
+**Date:** 2026-04-22
+**Context:** Added `/brain topic --sync-all` to refresh every topic in one pass. Need arose after realizing users doing bulk `/brain decide/bug/history` additions had no cheap way to propagate new events across every topic (single-topic `--sync` requires running per topic; `/brain update` only captures this-session events). Naive loop-over-topics would re-read `decisions.md`/`bugs.md`/`history.md`/`features/*.md` fresh for each topic → token cost scales ~O(N topics × event-page size).
+**Decision:** Spec says read all event pages ONCE into working context, iterate topics as pure filters against the cached content. Cost becomes `(sum of event-page sizes) + O(N × topic-file-size)`. For 10 topics this is ~3-5× cheaper than naive; for 20+ topics ~7-10× cheaper.
+**Alternatives considered:**
+- Naive per-topic loop — rejected, wasteful re-reads
+- Support `--keywords` in bulk mode (ambiguous — whose keywords?) — rejected, each topic uses its own inferred synonyms
+- Support `--keywords-map "topic1:a,b;topic2:c,d"` for fully deterministic bulk — rejected for v1 complexity; deferred
+- Per-topic y/N prompts (N prompts) — rejected, approval fatigue; went with grouped `a/s/q` prompt (accept-all / select-per-topic / quit)
+**Constraint that shaped the choice:** token efficiency for users with many topics + UX constraint against mass-approval fatigue.
+**Risks tracked:** "read events ONCE" is prompt-level guidance — LLM could re-read if sloppy; grouped prompt could encourage 'a' without review. Both surfaced in commit message as watchlist.
+**Status:** Active. See [[features/topic-pages.md]].
 
 ## Scoped support to Claude Code only; format stays tool-agnostic
 **Date:** 2026-04-19
