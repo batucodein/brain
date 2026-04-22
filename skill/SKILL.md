@@ -22,6 +22,7 @@ Per-repo project memory tracked in git. Every developer who clones the repo gets
 /brain history "<text>"   # Add a history entry
 /brain query "<question>" # Ask a question — search pages, follow links, synthesize answer
 /brain topic <name>       # Create or sync a topic page (add --sync [--keywords "a,b,c"] to backfill Timeline)
+/brain topic --sync-all   # Bulk-sync every existing topic from current .brain/ content
 /brain dashboard          # Generate interactive dashboard of all .brain/ entries
 /brain doctor             # Full diagnostic: integrity, format, content quality, staleness
 /brain uninstall          # Remove brain skill, hooks, and config from this machine
@@ -559,14 +560,26 @@ Topic creation is **explicit, user-initiated only**. The LLM never auto-creates 
 
 ### Usage
 ```
-/brain topic <name>                      # Create topics/<slug>.md from template if missing
-/brain topic <name> --sync               # Scan event pages for entries; LLM-guessed synonyms
-/brain topic <name> --sync --keywords "a,b,c"   # Sync using EXPLICIT keyword list (no synonym guessing)
+/brain topic <name>                              # Create topics/<slug>.md from template if missing
+/brain topic <name> --sync                       # Scan event pages for entries; LLM-guessed synonyms
+/brain topic <name> --sync --keywords "a,b,c"    # Sync using EXPLICIT keyword list (no synonym guessing)
+/brain topic --sync-all                          # Bulk-sync every existing topic (smart: events read once)
 ```
 
 ### Steps
 
-1. **Validate the argument.**
+1. **Mode dispatch.**
+   - If the invocation is `/brain topic --sync-all` (no `<name>`, no `--keywords`): skip to **§ Bulk mode** at the end of this section. Do NOT run Steps 2–7.
+   - If `--sync-all` is combined with `<name>` OR `--keywords`: reject with:
+     ```
+     --sync-all takes no name and no --keywords. Use:
+       /brain topic --sync-all                  (refresh every topic)
+       /brain topic <name> --sync [--keywords]   (refresh one topic)
+     ```
+     Stop.
+   - Otherwise (named-topic mode): continue to Step 2.
+
+2. **Validate the argument.**
    - If `<name>` is missing or empty: print usage (`/brain topic <name> [--sync [--keywords "a,b,c"]]`), do NOT create anything, stop.
    - Trim whitespace from `<name>`.
    - Reject if `<name>` contains any of: `/`, `\`, `..`, leading `.`, null bytes, control characters. Print:
@@ -575,14 +588,14 @@ Topic creation is **explicit, user-initiated only**. The LLM never auto-creates 
      ```
      Stop. No file is created.
 
-2. **Slugify the name** per SCHEMA.md § Anchor Slug Algorithm (lowercase, strip punctuation, whitespace→hyphens, collapse hyphens, trim). Call this `<slug>`. Empty slug after slugification (e.g., name was all punctuation) → print error and stop.
+3. **Slugify the name** per SCHEMA.md § Anchor Slug Algorithm (lowercase, strip punctuation, whitespace→hyphens, collapse hyphens, trim). Call this `<slug>`. Empty slug after slugification (e.g., name was all punctuation) → print error and stop.
 
-3. **Check existence.**
+4. **Check existence.**
    ```bash
    test -f .brain/topics/<slug>.md && echo EXISTS || echo MISSING
    ```
 
-4. **If MISSING and NOT --sync:**
+5. **If MISSING and NOT --sync:**
    - Read the template at `~/.claude/skills/brain/templates/topic.md`. If the template is missing, tell the user the skill install is incomplete and suggest `~/.claude/skills/brain/install.sh` to restore it. Stop.
    - Substitute `{{TOPIC_NAME}}` with the user's original casing of `<name>` (e.g. "Redis Caching", not "redis-caching").
    - Substitute `{{DATE}}` with today's date in `YYYY-MM-DD`.
@@ -597,7 +610,7 @@ Topic creation is **explicit, user-initiated only**. The LLM never auto-creates 
      ```
    - Stop. Do NOT proceed to sync unless `--sync` was on the original command.
 
-5. **If EXISTS and NOT --sync (collision):**
+6. **If EXISTS and NOT --sync (collision):**
    - Print:
      ```
      topics/<slug>.md already exists. Options:
@@ -607,7 +620,7 @@ Topic creation is **explicit, user-initiated only**. The LLM never auto-creates 
      ```
    - Stop. Do NOT overwrite or regenerate.
 
-6. **If --sync is passed** (works whether the file was just created or already existed):
+7. **If --sync is passed** (works whether the file was just created or already existed):
    - **Determine the keyword set:**
      - If `--keywords "a,b,c"` was provided: use EXACTLY that comma-separated list (after trimming whitespace around each term). No LLM synonym expansion.
      - Otherwise: start from `<name>` + `<slug>`; infer obvious synonyms (e.g., "redis" → "cache", "caching", "session store"). If the inference is uncertain, ask the user.
@@ -637,7 +650,91 @@ Topic creation is **explicit, user-initiated only**. The LLM never auto-creates 
    - Write the file.
    - Confirm to user: `Synced N entries into topics/<slug>.md Timeline.`
 
-7. **Never auto-create topic pages from any other command.** If `/brain update` detects a recurring theme that might deserve a topic, it SUGGESTS the user run `/brain topic <domain>` — it does not create the file itself.
+8. **Never auto-create topic pages from any other command.** If `/brain update` detects a recurring theme that might deserve a topic, it SUGGESTS the user run `/brain topic <domain>` — it does not create the file itself.
+
+### Bulk mode: `/brain topic --sync-all`
+
+Refreshes every existing topic in one pass. Uses a **smart** implementation: event pages are read ONCE at the start, not per-topic. For a project with N topics, this is roughly N× cheaper than looping `/brain topic <name> --sync` manually.
+
+**Steps:**
+
+1. **List existing topics.**
+   ```bash
+   ls .brain/topics/*.md 2>/dev/null
+   ```
+   If the directory doesn't exist or is empty: print `No topics to sync. Create one with /brain topic <name>.` and stop.
+
+2. **Read all event pages ONCE into working context.** Read fully:
+   ```
+   .brain/decisions.md
+   .brain/bugs.md
+   .brain/history.md
+   .brain/features/*.md
+   ```
+   Parse each into a list of entries: `(page, anchor_slug, date, header, first_body_line)`. This cache is the source of truth for the rest of the operation — do NOT re-read these files per topic.
+
+3. **For each topic `.brain/topics/<slug>.md`:**
+   - Read the topic file (Overview, existing Timeline, Related).
+   - Derive the keyword set: topic name + slug + LLM-inferred synonyms (same logic as single-topic `--sync`). Note: `--keywords` is NOT supported in bulk mode — each topic gets its own inferred set.
+   - **Filter the cached entries** by keyword match against `header + first_body_line` (cheap — no file re-reads).
+   - **Dedup** against the topic's existing Timeline: for each candidate `[[page.md#anchor]]`, skip if already present.
+   - Collect remaining candidates as the topic's proposed additions.
+
+4. **Present a grouped proposal:**
+   ```
+   Bulk sync — reviewed N topics, found M total new bullets:
+
+   topics/auth.md          +3 new bullets
+     - **2026-05-01** — Added 2FA [[decisions.md#added-2fa]]
+     - **2026-04-15** — OAuth error handling [[bugs.md#oauth-error]]
+     - **2026-04-10** — Session cookie expiry [[history.md#...]]
+
+   topics/storage.md       0 new (up to date)
+
+   topics/transactions.md  +5 new bullets
+     - ...
+
+   Apply?
+     (a) accept all
+     (s) select per topic (y/N for each)
+     (q) quit without changes
+   ```
+
+   If M is 0 across all topics: print `All topics up to date — nothing to sync.` and stop.
+
+5. **Apply based on user's answer:**
+   - **`a` (accept all):** write all accepted bullets across all topics.
+   - **`s` (select per topic):** iterate each topic's proposals; for each, show its bullets and ask `y/N`. Apply only accepted.
+   - **`q` (quit):** exit without any writes.
+
+6. **Write phase.** For each topic with at least one accepted bullet:
+   - Read `.brain/topics/<slug>.md`.
+   - Append the accepted bullets to the `## Timeline` section.
+   - Sort all Timeline bullets by `**Date:** YYYY-MM-DD` descending.
+   - Set the topic's `updated:` frontmatter to today's date.
+   - Write the file.
+
+7. **Confirm:**
+   ```
+   Synced X bullets across Y topics.
+     topics/auth.md          +3
+     topics/transactions.md  +5
+     topics/neon.md          +1
+   Z topics unchanged.
+   ```
+
+**Why this is efficient:**
+
+- **Event pages read once.** In a naive loop-over-topics, `decisions.md` would be re-read N times. Here it's read once and filtered per-topic from context. ~N× token savings on event reads.
+- **User reviews in one grouped prompt.** Single approval flow, not N prompts.
+- **Dedup is cheap.** Per-topic Timeline grep is small and fast.
+- **Bounded cost:** total ≈ (sum of event-page sizes) + O(N topics × size of topic file) — grows slowly as topic count increases.
+
+**What it intentionally does NOT do** (same as single-topic `--sync`):
+- Does NOT overwrite Overview, Current Status, Key Decisions, or Related sections.
+- Does NOT remove stale Timeline bullets whose targets no longer exist (doctor flags those).
+- Does NOT repoint wikilinks to compacted archive paths (manual repoint required).
+- Does NOT create new topic pages (creation is still `/brain topic <name>` only).
 
 ---
 
