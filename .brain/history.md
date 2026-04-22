@@ -1,9 +1,17 @@
 ---
 type: history
-updated: 2026-04-18
+updated: 2026-04-22
 ---
 
 # History
+
+## Added /brain topic --sync-all for bulk topic refresh
+**Date:** 2026-04-22
+New invocation mode on `/brain topic`: `--sync-all` refreshes every existing topic in one pass. Closes the gap where users doing bulk manual `/brain decide/bug/history` adds had to run `/brain topic <name> --sync` per topic to propagate. Implementation reads event pages ONCE into working context and filters per-topic from cache, making it ~N× cheaper than looping the per-topic command. Grouped `a/s/q` approval prompt avoids mass-approval fatigue. `--keywords` is intentionally unsupported in bulk mode (each topic uses its own inferred synonyms). Commit `f3dde67`. See [[decisions.md#bulk-topic-sync-reads-event-pages-once-not-per-topic]], [[features/topic-pages.md]].
+
+## README scoped down — Claude Code only, format stays tool-agnostic
+**Date:** 2026-04-19
+Removed unverified multi-tool claims from README. Cursor and Codex were listed in Platform Support and the Tier 1 description, but brain has only ever been tested on Claude Code. Now: explicit status banner ("Supported on Claude Code only"), Prerequisites lists Claude Code first, Platform Support section labels `.cursor/rules` and `AGENTS.md` paths as "speculative hooks for future multi-tool support, untested." The `/brain init` code still writes to those files if they exist — the hook remains, just no longer claimed as a supported feature. See [[decisions.md#scoped-support-to-claude-code-only-format-stays-tool-agnostic]].
 
 ## Closed organic-archive-discovery gap via SCHEMA guidance
 **Date:** 2026-04-18
